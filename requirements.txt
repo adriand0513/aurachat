@@ -1,10 +1,8 @@
 fastapi
 uvicorn
 python-dotenv
-stripe
-requests
 pydantic
-
-# ── New for authentication ──
-pyjwt[crypto]          # JWT encoding/decoding
 passlib[argon2]
+python-jose[cryptography]
+requests
+stripe
