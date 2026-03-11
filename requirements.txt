@@ -1,8 +1,10 @@
 fastapi
 uvicorn
 python-dotenv
-pydantic
-passlib[argon2]
-python-jose[cryptography]
-requests
-stripe
+pydantic[email]               # includes email-validator for EmailStr
+passlib[argon2]               # for password hashing
+python-jose[cryptography]     # for JWT (jose library)
+requests                      # for API calls (xAI, wttr.in, etc.)
+stripe                        # for payments
+aiosqlite                     # for async SQLite (if using async DB ops)
+email-validator               # explicit (in case pydantic[email] doesn't pull it)
