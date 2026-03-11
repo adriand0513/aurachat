@@ -1,0 +1,6 @@
+.env
+users.db
+migration.log
+__pycache__/
+*.pyc
+*.log
