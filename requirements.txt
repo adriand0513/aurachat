@@ -8,3 +8,4 @@ requests                      # for API calls (xAI, wttr.in, etc.)
 stripe                        # for payments
 aiosqlite                     # for async SQLite (if using async DB ops)
 email-validator               # explicit (in case pydantic[email] doesn't pull it)
+python-multipart
