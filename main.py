@@ -96,9 +96,11 @@ app.add_middleware(
         "http://127.0.0.1:8000",
         "*"
     ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=True,                     # required for cookies/auth
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
+    expose_headers=["Authorization"],
+    max_age=600,   
 )
 
 init_db()
