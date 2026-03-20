@@ -1,5 +1,5 @@
-# postprocess.py
 import re
+import random
 
 def clean_reply(text: str) -> str:
     if not text:
@@ -7,54 +7,45 @@ def clean_reply(text: str) -> str:
 
     text = text.strip()
 
-    # ── Step 1: Replace dashes with ellipses (the most natural texting feel) ─────
-    dash_patterns = [
-        r'—',                               # em dash
-        r'–',                               # en dash
-        r'\s*-\s*(?=[A-Za-z])',             # hyphen with spaces before word
-        r'\s*-\s*$',                        # trailing hyphen
-        r'(?<=[A-Za-z])\s*-\s*(?=[A-Za-z])',# mid-sentence hyphen with spaces
-        r'-\s+',                            # hyphen followed by space
-    ]
+    # ── Kill anything that looks like model safety / refusal / meta ─────────────
+    text = re.sub(r'(?i)(as (an )?ai|language model|i\'m not allowed|can\'t assist|against policy|inappropriate|ethical reasons)', '', text)
+    text = re.sub(r'\[.*?]\s*', '', text)          # remove [thinking], [note], etc.
+    text = re.sub(r'\*.*?\*', '', text)            # kill *action* stage directions
+    text = re.sub(r'".*?"', '', text)              # remove quoted stage directions / inner monologue
 
-    # Replace any matched dash pattern with ellipsis + space
-    for pattern in dash_patterns:
-        text = re.sub(pattern, '… ', text)
+    # ── Replace various dashes → ellipsis (very common in real texting) ────────
+    text = re.sub(r'[-—–]+', '…', text)
 
-    # Normalize multiple ellipses (people don't usually write .......)
-    text = re.sub(r'[…]{2,}', '…', text)
+    # Normalize runs of punctuation & ellipses
+    text = re.sub(r'[.?!…]{3,}', '…', text)        # .... → …
+    text = re.sub(r'[!？]{2,}', '!', text)
+    text = re.sub(r'\s{2,}', ' ', text)
 
-    # ── Your original rules ─────────────────────────────────────────────────────
-
-    # Remove trailing question mark → turn into period
-    text = re.sub(r'\?\s*$', '.', text)
-
-    # Turn mid-sentence questions into statements
-    text = re.sub(r'(\S+)\?\s*', r'\1. ', text)
-
-    # Remove very common unwanted words/patterns
-    banned = r'\b(boo|papi|baby|cutie|wassup|sup|wyd|hiii|heyyy|miss ?me|already\??|fr|lma?o+|omg+|no ?way)\b'
+    # ── Remove banned cringe / overused words ──────────────────────────────────
+    banned = r'\b(boo|papi|baby|cutie|princess|wassup|wyd|sup|heyyy|hiii|miss ?me|already\??|fr|lma?o+|omg+|no ?way|lowkey|highkey|vibes?|energy)\b'
     text = re.sub(banned, '', text, flags=re.IGNORECASE)
 
-    # Limit emojis severely (keep at most 1)
-    emojis = re.findall(r'[\U0001F300-\U0001F9FF]', text)
+    # ── Severely limit emojis — max 1, and remove most ─────────────────────────
+    emoji_pattern = r'[\U0001F300-\U0001F9FF]'
+    emojis = re.findall(emoji_pattern, text)
     if len(emojis) > 1:
-        keep_first = True
-        def repl(m):
-            nonlocal keep_first
-            if keep_first:
-                keep_first = False
-                return m.group(0)
-            return ''
-        text = re.sub(r'[\U0001F300-\U0001F9FF]', repl, text)
+        # keep only first emoji, remove rest
+        text = re.sub(emoji_pattern, lambda m: '' if random.random() < 0.7 else m.group(0), text, count=999)
+        # if still more than 1, keep only the very first one
+        first_emoji_pos = text.find(next((c for c in text if re.match(emoji_pattern, c)), ''))
+        if first_emoji_pos != -1:
+            text = re.sub(emoji_pattern, '', text[first_emoji_pos+1:])  # crude but effective
 
-    # ── Final cleanup ───────────────────────────────────────────────────────────
-    # Collapse multiple spaces/punctuation
-    text = re.sub(r'([.!?]){2,}', r'\1', text)      # !! → !
-    text = re.sub(r'\s{2,}', ' ', text)             # multiple spaces → single
-    text = re.sub(r'\s*\.\s*', '. ', text)          # normalize periods + spaces
+    # ── Turn trailing questions into statements (reduces interrogative begging feel)
+    text = re.sub(r'\?\s*$', '.', text)
 
-    # Trim trailing punctuation that looks off
-    text = re.sub(r'[.!?]\s*$', lambda m: m.group(0).rstrip(), text)
+    # ── Final normalization ─────────────────────────────────────────────────────
+    text = re.sub(r'\s*\.\s*', '. ', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+
+    # Very light random human noise (optional — can be removed if too much)
+    if random.random() < 0.12 and not text.endswith(('…', '.', '!', '?')):
+        text += random.choice([' …', ' lol', ' deadass', ''])
 
     return text.strip()
