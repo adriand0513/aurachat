@@ -303,116 +303,6 @@
             line-height: 1.6;
         }
 
-        .age-legal a {
-            color: var(--accent-purple);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        /* ── SIMPLE AUTH MODAL ── */
-        #auth-modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(10, 0, 20, 0.92);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-        }
-
-        .modal-content {
-            background: linear-gradient(145deg, rgba(20, 0, 40, 0.96), rgba(10, 0, 30, 0.98));
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 28px;
-            padding: 48px 40px;
-            width: 90%;
-            max-width: 440px;
-            text-align: center;
-            border: 1px solid rgba(195,0,255,0.12);
-            box-shadow: 0 20px 80px rgba(0,0,0,0.7);
-        }
-
-        .modal-header h2 {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 32px;
-            background: linear-gradient(90deg, #ff0099, #c300ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .modal-tabs {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 32px;
-            gap: 8px;
-        }
-
-        .tab {
-            padding: 12px 32px;
-            font-size: 16px;
-            font-weight: 600;
-            background: rgba(50,20,80,0.6);
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            border-radius: 50px;
-            transition: all 0.3s;
-        }
-
-        .tab.active, .tab:hover {
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
-            color: white;
-            box-shadow: 0 0 20px var(--accent-glow);
-        }
-
-        input[type="email"], input[type="password"] {
-            width: 100%;
-            padding: 16px 20px;
-            margin: 12px 0;
-            border: none;
-            border-radius: 50px;
-            background: rgba(50,20,80,0.5);
-            color: white;
-            font-size: 16px;
-            backdrop-filter: blur(6px);
-        }
-
-        input:focus {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(195,0,255,0.3);
-        }
-
-        #auth-btn {
-            width: 100%;
-            padding: 16px;
-            margin-top: 20px;
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
-            color: white;
-            border: none;
-            border-radius: 50px;
-            font-size: 18px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        #auth-btn:hover {
-            transform: scale(1.04);
-            box-shadow: 0 0 30px var(--accent-glow);
-        }
-
-        #auth-error {
-            color: var(--danger);
-            margin-top: 12px;
-            font-size: 14px;
-        }
-
-        .hidden { display: none !important; }
-
         .avatar-container {
             position: relative;
             width: 48px;
@@ -477,6 +367,21 @@
             color: var(--accent-pink);
             transform: scale(1.15);
         }
+
+        .clear-chat-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, var(--danger), #d50000);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .clear-chat-btn:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
@@ -491,8 +396,7 @@
             </div>
         </div>
         <div id="user-info">
-            <span id="logged-in-header">Not logged in</span>
-            <button id="logout-btn" class="hidden">Logout</button>
+            <button class="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
         </div>
     </div>
 
@@ -518,10 +422,11 @@
     <div class="input-area">
         <input id="user-input" type="text" placeholder="Message Isabella..." autocomplete="off" autofocus disabled />
         <button id="send-btn" disabled>➤</button>
-		<!-- <button id="tip-btn" class="tip-btn hidden">Tip for Exclusive Pic</button> -->
+        <!-- Tip button disabled for now - payment flow not implemented -->
+        <!-- <button id="tip-btn" class="tip-btn hidden">Tip for Exclusive Pic</button> -->
     </div>
 
-    <!-- Age Confirmation Modal -->
+    <!-- Age Confirmation Modal (kept but simplified) -->
     <div id="age-modal">
         <div class="age-modal-content">
             <h2 class="age-title">One last thing...</h2>
@@ -534,54 +439,30 @@
                 <button id="age-no" class="age-btn">No</button>
             </div>
             <p class="age-legal">
-                By continuing you confirm you are of legal age.
+                By continuing you confirm you are of legal age in your jurisdiction.
+                <!-- Terms & Privacy links disabled - pages not implemented yet -->
+                <!-- and agree to our <a href="#">Terms of Service</a> & <a href="#">Privacy Policy</a>. -->
             </p>
-        </div>
-    </div>
-
-    <!-- Simple Auth Modal (email + password) -->
-    <div id="auth-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modal-title">Welcome</h2>
-            </div>
-            <div class="modal-tabs">
-                <button class="tab active" id="tab-register">Register</button>
-                <button class="tab" id="tab-login">Login</button>
-            </div>
-            <form id="auth-form">
-                <input type="email" id="email" placeholder="Email" required />
-                <input type="password" id="password" placeholder="Password" required />
-                <button type="submit" id="auth-btn">Register</button>
-                <div id="auth-error"></div>
-            </form>
         </div>
     </div>
 
     <script>
         const API_BASE = '/';
-        let token = localStorage.getItem('auth_token');
-        let currentUserEmail = localStorage.getItem('user_email') || 'Guest';
-        let picCount = 0;
+        let conversationId = localStorage.getItem('conversation_id');
+        let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
+
+        // Generate unique ID if first time
+        if (!conversationId) {
+            conversationId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            localStorage.setItem('conversation_id', conversationId);
+        }
 
         const messagesContainer = document.getElementById('messages-container');
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-        const tipBtn = document.getElementById('tip-btn');
-        const logoutBtn = document.getElementById('logout-btn');
-        const loggedInHeader = document.getElementById('logged-in-header');
-        const authModal = document.getElementById('auth-modal');
         const ageModal = document.getElementById('age-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const authBtn = document.getElementById('auth-btn');
-        const authForm = document.getElementById('auth-form');
-        const authError = document.getElementById('auth-error');
-        const tabRegister = document.getElementById('tab-register');
-        const tabLogin = document.getElementById('tab-login');
         const loadingHistory = document.getElementById('loading-history');
-        const ageYesBtn = document.getElementById('age-yes');
-        const ageNoBtn = document.getElementById('age-no');
 
         let debounceTimer = null;
         const DEBOUNCE_MS = 8000;
@@ -599,272 +480,68 @@
             sendBtn.disabled = true;
         }
 
-        function showAuthModal() {
-            authModal.style.display = 'flex';
-            loggedInHeader.textContent = 'Not logged in';
-            logoutBtn.classList.add('hidden');
-            tipBtn.classList.add('hidden');
-            ageModal.style.display = 'none';
-            disableChatUI();
-        }
-
-        function hideAuthModal() {
-            authModal.style.display = 'none';
-        }
-
-        function setLoggedIn(email) {
-            currentUserEmail = email;
-            localStorage.setItem('user_email', email);
-            loggedInHeader.textContent = `Logged in as ${email}`;
-            logoutBtn.classList.remove('hidden');
-            tipBtn.classList.remove('hidden');
-            hideAuthModal();
-        }
-
-        tabRegister.onclick = () => {
-            tabRegister.classList.add('active');
-            tabLogin.classList.remove('active');
-            modalTitle.textContent = 'Register';
-            authBtn.textContent = 'Register';
-        };
-
-        tabLogin.onclick = () => {
-            tabLogin.classList.add('active');
-            tabRegister.classList.remove('active');
-            modalTitle.textContent = 'Login';
-            authBtn.textContent = 'Login';
-        };
-
-        authForm.onsubmit = async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-            const isRegister = authBtn.textContent === 'Register';
-            const endpoint = isRegister ? '/auth/register' : '/auth/login';
-
-            authError.textContent = '';
-            authError.style.color = 'white';
-
-            try {
-                let res;
-                if (isRegister) {
-                    res = await fetch(endpoint, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email, password })
-                    });
-                } else {
-                    const params = new URLSearchParams();
-                    params.append('username', email);
-                    params.append('password', password);
-                    res = await fetch(endpoint, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: params
-                    });
-                }
-
-                const data = await res.json();
-
-                if (!res.ok) {
-                    authError.textContent = data.detail || (isRegister ? 'Registration failed' : 'Login failed');
-                    authError.style.color = '#ff3366';
-                    return;
-                }
-
-                if (isRegister) {
-                    authError.textContent = "Registration successful! Logging you in...";
-                    authError.style.color = '#00ff99';
-                    // Auto-login after register
-                    setTimeout(() => tabLogin.click(), 1500);
-                } else {
-                    // Login success
-                    localStorage.setItem('auth_token', data.access_token);
-                    token = data.access_token;
-                    setLoggedIn(email);
-                    showAgeModal();  // proceed to age confirmation if needed
-                }
-
-            } catch (err) {
-                authError.textContent = 'Connection error – please try again';
-                authError.style.color = '#ff3366';
-                console.error(err);
-            }
-        };
-
-        logoutBtn.onclick = logout;
-
-        function logout() {
-            localStorage.clear();
-            token = null;
-            currentUserEmail = null;
-            picCount = 0;
-            messagesContainer.innerHTML = '';
-            showAuthModal();
-        }
-
-        // ── Age Confirmation ─────────────────────────────────────────────────────
-        async function checkAgeConfirmation() {
-            try {
-                const res = await fetch('/api/history', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                if (res.status === 403) {
-                    showAgeModal();
-                } else if (res.ok) {
-                    const data = await res.json();
-                    messagesContainer.innerHTML = '';
-                    data.messages.forEach(msg => {
-                        const type = msg.role === 'user' ? 'sent' : 'received';
-                        addMessage(msg.content, type);
-                    });
-                    loadingHistory?.remove();
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                    await updatePicButtonState();
-                    enableChatUI();
-                } else {
-                    throw new Error('Failed to load');
-                }
-            } catch (err) {
-                console.error('Age check failed:', err);
-                showAgeModal();
-            }
-        }
-
         function showAgeModal() {
             ageModal.style.display = 'flex';
             setTimeout(() => ageModal.classList.add('show'), 50);
             disableChatUI();
-            tipBtn.disabled = true;
         }
 
         function hideAgeModal() {
             ageModal.classList.remove('show');
             setTimeout(() => ageModal.style.display = 'none', 500);
             enableChatUI();
-            tipBtn.disabled = picCount >= 5;
         }
 
-        document.getElementById('age-yes').onclick = async () => {
-            try {
-                const res = await fetch('/api/confirm-age', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ confirmed: true })
-                });
-
-                const data = await res.json();
-                if (res.ok && data.success) {
-                    hideAgeModal();
-                    await loadHistory();
-                } else {
-                    alert(data.message || "Access denied.");
-                    logout();
-                }
-            } catch (err) {
-                alert("Error confirming age. Please try again.");
-            }
+        document.getElementById('age-yes').onclick = () => {
+            hideAgeModal();
+            loadHistory(); // Load saved convo
         };
 
         document.getElementById('age-no').onclick = () => {
             alert("You must be 18+ to use this service.");
-            logout();
+            window.location.href = "/"; // Redirect to home or close tab
         };
 
-        // ── On page load ─────────────────────────────────────────────────────────
-        window.addEventListener('load', async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const paymentStatus = urlParams.get('payment');
-
-            if (token) {
-                try {
-                    const meRes = await fetch('/auth/me', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (meRes.ok) {
-                        const user = await meRes.json();
-                        setLoggedIn(user.email || 'User');
-                        await checkAgeConfirmation();
-
-                        if (ageModal.style.display !== 'flex') {
-                            enableChatUI();
-                        }
-
-                        if (paymentStatus === 'success') {
-                            await handlePaymentSuccess();
-                        }
-                    } else {
-                        throw new Error('Invalid token');
-                    }
-                } catch (err) {
-                    console.error('Auth check failed:', err);
-                    localStorage.removeItem('auth_token');
-                    showAuthModal();
-                }
-            } else {
-                showAuthModal();
-            }
-
-            if (paymentStatus) {
-                window.history.replaceState({}, document.title, '/chat');
-            }
-        });
-
-        // ── Chat Functions (unchanged) ──────────────────────────────────────────
-        async function loadHistory() {
-            if (!token) return;
-            loadingHistory.textContent = "Loading conversation...";
-
-            try {
-                const res = await fetch('/api/history', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!res.ok) throw new Error('Failed to load history');
-                const data = await res.json();
+        // ── Conversation Persistence ──────────────────────────────────────────────
+        // Load existing messages on page load
+        window.addEventListener('load', () => {
+            if (messagesHistory.length > 0) {
                 messagesContainer.innerHTML = '';
-                data.messages.forEach(msg => {
+                messagesHistory.forEach(msg => {
                     const type = msg.role === 'user' ? 'sent' : 'received';
                     addMessage(msg.content, type);
                 });
-                loadingHistory?.remove();
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            } catch (err) {
-                console.error('History load failed:', err);
-                loadingHistory.textContent = "Couldn't load history";
+            }
+            showAgeModal(); // Show age gate on every load
+        });
+
+        function clearConversation() {
+            if (confirm("Clear this conversation?")) {
+                localStorage.removeItem('conversation_id');
+                localStorage.removeItem('messages_history');
+                messagesHistory = [];
+                messagesContainer.innerHTML = '';
+                conversationId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+                localStorage.setItem('conversation_id', conversationId);
+                showAgeModal();
             }
         }
 
-        async function updatePicButtonState() {
-            if (!token) return;
-            try {
-                const res = await fetch('/api/can-send-pic', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                picCount = data.current_count || 0;
-                tipBtn.disabled = !data.can_send;
-                tipBtn.textContent = data.can_send ? "Tip for Exclusive Pic" : "Max Pics Reached";
-            } catch (err) {
-                console.error('Pic status check failed:', err);
-                tipBtn.disabled = true;
-                tipBtn.textContent = "Check limit later";
-            }
+        // ── Chat Functions ────────────────────────────────────────────────────────
+        async function loadHistory() {
+            // Already loaded from localStorage in 'load' event
+            loadingHistory?.remove();
+            enableChatUI();
         }
 
         async function sendMessage() {
-            if (!token) {
-                showAuthModal();
-                return;
-            }
-
             const msg = input.value.trim();
             if (!msg) return;
 
             addMessage(msg, 'sent');
+            messagesHistory.push({ role: 'user', content: msg });
+            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
 
             try {
@@ -872,7 +549,6 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({ message: msg })
                 });
@@ -890,7 +566,7 @@
         }
 
         async function triggerBotReply() {
-            if (isProcessing || !token) return;
+            if (isProcessing) return;
             isProcessing = true;
             debounceTimer = null;
 
@@ -901,7 +577,6 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
                     }
                 });
 
@@ -919,6 +594,10 @@
 
                     addMessage(data.replies[i], 'received', isLast ? data.voice_note : null);
 
+                    // Save bot reply to history
+                    messagesHistory.push({ role: 'assistant', content: data.replies[i] });
+                    localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+
                     if (!isLast) {
                         await new Promise(r => setTimeout(r, 900 + Math.random() * 1100));
                     }
@@ -926,38 +605,14 @@
             } catch (err) {
                 console.error(err);
                 addMessage("Sorry… got distracted for a sec", 'received');
+                messagesHistory.push({ role: 'assistant', content: "Sorry… got distracted for a sec" });
+                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             } finally {
                 isProcessing = false;
                 input.focus();
                 messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
             }
         }
-
-        tipBtn.onclick = async () => {
-            if (!token) {
-                showAuthModal();
-                return;
-            }
-            try {
-                const res = await fetch('/api/create-checkout-session', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ tip_type: 'pic_tease' })
-                });
-
-                const data = await res.json();
-                if (res.ok && data.checkout_url) {
-                    window.location.href = data.checkout_url;
-                } else {
-                    alert(data.detail || 'Payment setup failed');
-                }
-            } catch (err) {
-                alert('Error: ' + err.message);
-            }
-        };
 
         function addMessage(text, type, mediaUrl = null, isImage = false) {
             typingIndicator.classList.add('hidden');
