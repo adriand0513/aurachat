@@ -84,25 +84,6 @@ logger.info("---")
 app = FastAPI(title="Aurachat Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-	CORSMiddleware,
-    allow_origins=[ 
-    	"https://aurachat-5765.onrender.com",
-        "https://aurachat.onrender.com",
-        "https://aurachat.it.com",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "*"
-    ],
-    allow_credentials=True,                     # required for cookies/auth
-    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
-    expose_headers=["Authorization"],
-    max_age=600,   
-)
-
 init_db()
 
 # ── Rate limiting (per user_id) ─────────────────────────────────────────────
