@@ -81,8 +81,25 @@ logger.info(f" Model: {XAI_MODEL}")
 logger.info(f" ElevenLabs Voice: {ELEVENLABS_VOICE_ID or 'NOT SET'}")
 logger.info("---")
 
-app = FastAPI(title="Isabella Chatbot")
+app = FastAPI(title="Aurachat Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+	CORSMiddleware,
+    allow_origins=[ 
+    	"https://aurachat-5765.onrender.com",
+        "https://aurachat.onrender.com",
+        "https://aurachat.it.com",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "*"
+    ]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 init_db()
 
@@ -426,7 +443,7 @@ TEASER_MESSAGES = [
     "Missing that voice of yours... talk later? 💕",
     "Day's dragging without our little chats... hurry up evening 😘",
     "Thinking naughty thoughts about you... behave until tonight 😉",
-    "Just got out of the shower and thought of you... evil grin",
+    "Just got out of the shower and thought of you...",
 ]
 
 async def send_daily_teaser():
