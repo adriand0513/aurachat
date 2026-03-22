@@ -13,6 +13,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
 
+from collections import defaultdict
+
 from fastapi import FastAPI, HTTPException, Body, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
