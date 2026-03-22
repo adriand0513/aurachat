@@ -35,7 +35,6 @@
             padding: 14px 20px;
             background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
             backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid rgba(195,0,255,0.12);
             display: flex;
             align-items: center;
@@ -104,7 +103,6 @@
             padding: 14px 20px;
             background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
             backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
             border-top: 1px solid rgba(195,0,255,0.12);
             display: flex;
             align-items: center;
@@ -155,6 +153,14 @@
             max-width: 82%;
             font-size: 14px;
             color: var(--text-muted);
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .typing-indicator.visible {
+            visibility: visible;
+            opacity: 1;
         }
 
         .typing-dot {
@@ -265,6 +271,45 @@
             color: #aa88cc;
             margin-top: 48px;
         }
+
+        .avatar-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.92);
+            backdrop-filter: blur(12px);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .avatar-modal.show {
+            display: flex;
+        }
+
+        .avatar-modal-content {
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 16px;
+            box-shadow: 0 0 60px rgba(195,0,255,0.7);
+            object-fit: contain;
+        }
+
+        .avatar-modal-close {
+            position: absolute;
+            top: 30px;
+            right: 40px;
+            color: white;
+            font-size: 60px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        .avatar-modal-close:hover {
+            color: var(--accent-pink);
+            transform: scale(1.15);
+        }
     </style>
 </head>
 <body>
@@ -292,7 +337,7 @@
         <!-- Messages will be added here -->
     </div>
 
-    <div id="typing-indicator" class="typing-indicator hidden">
+    <div id="typing-indicator" class="typing-indicator">
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
@@ -302,9 +347,10 @@
     <div class="input-area">
         <input id="user-input" type="text" placeholder="Message Isabella..." autocomplete="off" autofocus />
         <button id="send-btn">➤</button>
+        <!-- Tip button removed for now -->
     </div>
 
-    <!-- Age Confirmation Modal -->
+    <!-- Age Confirmation Modal (optional - can be removed later) -->
     <div id="age-modal">
         <div class="age-modal-content">
             <h2 class="age-title">One last thing...</h2>
@@ -367,6 +413,7 @@
 
         // Load history on page load
         window.addEventListener('load', () => {
+            // Load persisted messages
             if (messagesHistory.length > 0) {
                 messagesContainer.innerHTML = '';
                 messagesHistory.forEach(msg => {
@@ -375,6 +422,8 @@
                 });
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
+
+            // Show age modal on every load (remove this line if you want zero friction)
             showAgeModal();
         });
 
@@ -424,8 +473,7 @@
             isProcessing = true;
             debounceTimer = null;
 
-            // Show typing only when waiting
-            typingIndicator.classList.remove('hidden');
+            typingIndicator.classList.add('visible');
 
             try {
                 const res = await fetch('/api/reply', {
@@ -436,16 +484,15 @@
 
                 const data = await res.json();
 
-                // Hide typing immediately after fetch
-                typingIndicator.classList.add('hidden');
+                typingIndicator.classList.remove('visible');
 
                 for (let i = 0; i < data.replies.length; i++) {
                     const isLast = i === data.replies.length - 1;
 
                     if (i > 0) {
-                        typingIndicator.classList.remove('hidden');
+                        typingIndicator.classList.add('visible');
                         await new Promise(r => setTimeout(r, 1200 + Math.random() * 1400));
-                        typingIndicator.classList.add('hidden');
+                        typingIndicator.classList.remove('visible');
                     }
 
                     addMessage(data.replies[i], 'received', isLast ? data.voice_note : null);
@@ -459,7 +506,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                typingIndicator.classList.add('hidden');
+                typingIndicator.classList.remove('visible');
                 addMessage("Sorry… got distracted for a sec", 'received');
                 messagesHistory.push({ role: 'assistant', content: "Sorry… got distracted for a sec" });
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
