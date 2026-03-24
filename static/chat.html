@@ -8,12 +8,10 @@
     <style>
         :root {
             --bg: #0d0015;
-            --card: rgba(30, 10, 50, 0.88);
             --accent-purple: #c300ff;
             --accent-pink: #ff0099;
             --accent-glow: rgba(195, 0, 255, 0.4);
             --danger: #ff3366;
-            --success: #00ff99;
             --text: #f8f0ff;
             --text-muted: #bb99cc;
             --input-bg: rgba(50, 20, 80, 0.6);
@@ -47,7 +45,6 @@
             width: 48px;
             height: 48px;
             cursor: pointer;
-            flex-shrink: 0;
         }
 
         .avatar {
@@ -60,20 +57,15 @@
             box-shadow: 0 0 16px var(--accent-glow);
         }
 
-        .contact-info h2 {
-            margin: 0;
-            font-size: 19px;
-            font-weight: 600;
-        }
-
         #messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 20px 16px;
             display: flex;
             flex-direction: column;
             gap: 14px;
             background: linear-gradient(to bottom, rgba(13,0,21,0.6), transparent);
+            min-height: 0; /* critical for flex scrolling */
         }
 
         .message {
@@ -96,7 +88,6 @@
             color: white;
             align-self: flex-start;
             border-bottom-left-radius: 8px;
-            backdrop-filter: blur(4px);
         }
 
         .input-area {
@@ -107,6 +98,9 @@
             display: flex;
             align-items: center;
             gap: 14px;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1000;
         }
 
         #user-input {
@@ -117,7 +111,6 @@
             background: var(--input-bg);
             color: white;
             font-size: 16px;
-            backdrop-filter: blur(6px);
         }
 
         #user-input:focus {
@@ -134,7 +127,6 @@
             border: none;
             font-size: 24px;
             cursor: pointer;
-            transition: all 0.25s;
         }
 
         #send-btn:hover {
@@ -194,84 +186,7 @@
             transform: scale(1.05);
         }
 
-        /* Age Confirmation Modal */
-        #age-modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(10, 0, 20, 0.94);
-            backdrop-filter: blur(16px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 3000;
-            opacity: 0;
-            transition: opacity 0.6s ease;
-        }
-
-        #age-modal.show {
-            display: flex;
-            opacity: 1;
-        }
-
-        .age-modal-content {
-            background: linear-gradient(145deg, rgba(20, 0, 40, 0.96), rgba(10, 0, 30, 0.98));
-            border-radius: 36px;
-            padding: 64px 48px;
-            width: 92%;
-            max-width: 540px;
-            text-align: center;
-            border: 1px solid rgba(195,0,255,0.15);
-            box-shadow: 0 30px 120px rgba(0,0,0,0.8);
-        }
-
-        .age-title {
-            font-size: 38px;
-            font-weight: 800;
-            margin-bottom: 28px;
-            background: linear-gradient(90deg, #ff0099, #c300ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .age-text {
-            font-size: 18px;
-            color: #e0c0ff;
-            margin-bottom: 52px;
-        }
-
-        .age-btns {
-            display: flex;
-            flex-direction: column;
-            gap: 28px;
-        }
-
-        .age-btn {
-            padding: 22px 64px;
-            font-size: 21px;
-            font-weight: 700;
-            border: none;
-            border-radius: 70px;
-            cursor: pointer;
-            transition: all 0.4s;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-        }
-
-        #age-yes {
-            background: linear-gradient(135deg, #ff0099, #c300ff);
-            color: white;
-        }
-
-        #age-no {
-            background: linear-gradient(135deg, #ff3366, #d50000);
-            color: white;
-        }
-
-        .age-legal {
-            font-size: 14px;
-            color: #aa88cc;
-            margin-top: 48px;
-        }
-
+        /* Full Avatar Modal */
         .avatar-modal {
             display: none;
             position: fixed;
@@ -334,7 +249,7 @@
     </div>
 
     <div id="messages-container">
-        <!-- Messages will be added here -->
+        <!-- Messages added here by JS -->
     </div>
 
     <div id="typing-indicator" class="typing-indicator">
@@ -347,84 +262,31 @@
     <div class="input-area">
         <input id="user-input" type="text" placeholder="Message Isabella..." autocomplete="off" autofocus />
         <button id="send-btn">➤</button>
-        <!-- Tip button removed for now -->
-    </div>
-
-    <!-- Age Confirmation Modal (optional - can be removed later) -->
-    <div id="age-modal">
-        <div class="age-modal-content">
-            <h2 class="age-title">One last thing...</h2>
-            <p class="age-text">
-                This is an exclusive 18+ experience.<br>
-                Are you 18 years of age or older?
-            </p>
-            <div class="age-btns">
-                <button id="age-yes" class="age-btn">Yes, I'm 18+</button>
-                <button id="age-no" class="age-btn">No</button>
-            </div>
-            <p class="age-legal">
-                By continuing you confirm you are of legal age in your jurisdiction.
-            </p>
-        </div>
     </div>
 
     <script>
-        const API_BASE = '/';
+        const messagesContainer = document.getElementById('messages-container');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const input = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
 
-        // Generate unique convo ID if first time
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
         }
 
-        const messagesContainer = document.getElementById('messages-container');
-        const typingIndicator = document.getElementById('typing-indicator');
-        const input = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
-        const ageModal = document.getElementById('age-modal');
-
-        let debounceTimer = null;
-        const DEBOUNCE_MS = 8000;
-        let isProcessing = false;
-
-        // ── Age Modal ──────────────────────────────────────────────────────────────
-        function showAgeModal() {
-            ageModal.style.display = 'flex';
-            setTimeout(() => ageModal.classList.add('show'), 50);
-            input.disabled = true;
-            sendBtn.disabled = true;
-        }
-
-        function hideAgeModal() {
-            ageModal.classList.remove('show');
-            setTimeout(() => ageModal.style.display = 'none', 500);
-            input.disabled = false;
-            sendBtn.disabled = false;
-            input.focus();
-        }
-
-        document.getElementById('age-yes').onclick = hideAgeModal;
-        document.getElementById('age-no').onclick = () => {
-            alert("You must be 18+ to use this service.");
-            window.location.href = "/";
-        };
-
-        // Load history on page load
+        // Load saved messages
         window.addEventListener('load', () => {
-            // Load persisted messages
-            if (messagesHistory.length > 0) {
-                messagesContainer.innerHTML = '';
-                messagesHistory.forEach(msg => {
-                    const type = msg.role === 'user' ? 'sent' : 'received';
-                    addMessage(msg.content, type);
-                });
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-
-            // Show age modal on every load (remove this line if you want zero friction)
-            showAgeModal();
+            messagesContainer.innerHTML = '';
+            messagesHistory.forEach(msg => {
+                const type = msg.role === 'user' ? 'sent' : 'received';
+                addMessage(msg.content, type);
+            });
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            input.focus();
         });
 
         function clearConversation() {
@@ -435,11 +297,9 @@
                 messagesContainer.innerHTML = '';
                 convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
                 localStorage.setItem('convo_id', convoId);
-                showAgeModal();
             }
         }
 
-        // ── Chat Functions ────────────────────────────────────────────────────────
         async function sendMessage() {
             const msg = input.value.trim();
             if (!msg) return;
@@ -450,16 +310,13 @@
             input.value = '';
 
             try {
-                const res = await fetch('/api/send', {
+                await fetch('/api/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: msg, convo_id: convoId })
                 });
 
-                if (!res.ok) throw new Error('Send failed');
-
-                if (debounceTimer) clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(triggerBotReply, DEBOUNCE_MS);
+                setTimeout(triggerBotReply, 600);
             } catch (err) {
                 console.error('Send error:', err);
                 addMessage("Couldn't send... try again", 'received');
@@ -469,10 +326,6 @@
         }
 
         async function triggerBotReply() {
-            if (isProcessing) return;
-            isProcessing = true;
-            debounceTimer = null;
-
             typingIndicator.classList.add('visible');
 
             try {
@@ -486,34 +339,20 @@
 
                 typingIndicator.classList.remove('visible');
 
-                for (let i = 0; i < data.replies.length; i++) {
-                    const isLast = i === data.replies.length - 1;
+                data.replies.forEach((bubble, i) => {
+                    setTimeout(() => {
+                        addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
+                        messagesHistory.push({ role: 'assistant', content: bubble });
+                        localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+                    }, i * 800);
+                });
 
-                    if (i > 0) {
-                        typingIndicator.classList.add('visible');
-                        await new Promise(r => setTimeout(r, 1200 + Math.random() * 1400));
-                        typingIndicator.classList.remove('visible');
-                    }
-
-                    addMessage(data.replies[i], 'received', isLast ? data.voice_note : null);
-
-                    messagesHistory.push({ role: 'assistant', content: data.replies[i] });
-                    localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-
-                    if (!isLast) {
-                        await new Promise(r => setTimeout(r, 900 + Math.random() * 1100));
-                    }
-                }
             } catch (err) {
                 console.error(err);
                 typingIndicator.classList.remove('visible');
                 addMessage("Sorry… got distracted for a sec", 'received');
                 messagesHistory.push({ role: 'assistant', content: "Sorry… got distracted for a sec" });
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-            } finally {
-                isProcessing = false;
-                input.focus();
-                messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
             }
         }
 
@@ -534,7 +373,7 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        // ── Event Listeners ───────────────────────────────────────────────────────
+        // Event listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
