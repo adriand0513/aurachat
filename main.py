@@ -12,7 +12,6 @@ import requests
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
-
 from collections import defaultdict
 
 from fastapi import FastAPI, HTTPException, Body, status
@@ -47,6 +46,17 @@ logger.info("---")
 
 app = FastAPI(title="Isabella Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ── Anonymous Memory (simple in-memory for MVP) ─────────────────────────────
+conversations = {}  # convo_id -> list of messages
+
+def get_history(convo_id: str) -> List[Dict]:
+    return conversations.get(convo_id, [])
+
+def save_message(convo_id: str, message: Dict):
+    if convo_id not in conversations:
+        conversations[convo_id] = []
+    conversations[convo_id].append(message)
 
 # ── Rate limiting (per conversation_id) ──────────────────────────────────────
 convo_rate_limits = defaultdict(list)
@@ -130,7 +140,6 @@ async def send_message(body: Dict[str, str] = Body(...)):
     if is_rate_limited(convo_id):
         raise HTTPException(429, "Slow down... let's not rush this 😏")
 
-    # Save user message (implement in memory.py)
     save_message(convo_id, {"role": "user", "content": message})
     return {"success": True}
 
@@ -151,7 +160,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     context = get_nyc_context()
     logger.info(f"{log_prefix} Generating reply | NYC: {context['time']} | Weather: {context['weather']}")
 
-    # Get history (implement in memory.py)
     history = get_history(convo_id)
     if len(history) > 30:
         history = history[-30:]
@@ -205,50 +213,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
     return {"replies": bubbles, "voice_note": voice_note}
-
-# ── Helper Functions ────────────────────────────────────────────────────────
-
-def get_nyc_context() -> Dict[str, str]:
-    nyc_tz = ZoneInfo("America/New_York")
-    now_nyc = datetime.now(nyc_tz)
-    time_str = now_nyc.strftime("%I:%M %p on %A, %B %d")
-    try:
-        r = requests.get("https://wttr.in/NYC?format=%c+%t+%w", timeout=5)
-        if r.status_code == 200:
-            parts = r.text.strip().split()
-            weather = f"{parts[0]} {parts[1]}, wind {parts[2]}" if len(parts) >= 3 else r.text.strip()
-        else:
-            weather = "cool and clear"
-    except:
-        weather = "chilly evening"
-    return {"time": time_str, "weather": weather}
-
-def split_into_bubbles(text: str) -> List[str]:
-    if not text.strip():
-        return ["..."]
-
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-
-    bubbles = []
-    for paragraph in paragraphs:
-        if len(paragraph) <= 120:
-            bubbles.append(paragraph)
-            continue
-
-        sentences = re.split(r'(?<=[.!?])\s+', paragraph)
-        current = ""
-        for sentence in sentences:
-            if len(current) + len(sentence) <= 100:
-                current += sentence + " "
-            else:
-                if current:
-                    bubbles.append(current.strip())
-                current = sentence + " "
-        if current:
-            bubbles.append(current.strip())
-
-    bubbles = [b.strip() for b in bubbles if b.strip()]
-    return bubbles if bubbles else [text.strip()]
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
