@@ -243,7 +243,11 @@
         
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
-        let currentThinkingTimeout = null;
+        
+        let userIdleTimeout = null;           // Timer for "user is done typing"
+        let thinkingTimeout = null;           // Timer for Isabella's thinking delay
+        
+        const USER_IDLE_PAUSE = 5000;         // 5 seconds - change this if you want
 
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -272,18 +276,14 @@
             }
         }
 
-        // Calculate realistic thinking delay (10-25 seconds)
+        // Calculate Isabella's thinking delay (10-25 seconds)
         function getThinkingDelay() {
-            // Base delay between 10 and 25 seconds
-            let delay = 8000 + Math.random() * 10000;
-            
-            // Slightly longer delay for longer or more flirty messages
+            let delay = 10000 + Math.random() * 15000;
             const lastMessage = messagesHistory[messagesHistory.length - 1];
             if (lastMessage && lastMessage.role === 'user') {
-                const msgLength = lastMessage.content.length;
-                if (msgLength > 60) delay += 4000;           // longer messages = more thinking
+                if (lastMessage.content.length > 60) delay += 4000;
                 if (/baby|sexy|beautiful|want|dream|love/i.test(lastMessage.content)) {
-                    delay += 3000; // slightly longer for flirty messages
+                    delay += 3000;
                 }
             }
             return Math.floor(delay);
@@ -304,8 +304,16 @@
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
 
-            // Clear any previous thinking timeout
-            if (currentThinkingTimeout) clearTimeout(currentThinkingTimeout);
+            // Reset the user idle timer every time a new message is sent
+            if (userIdleTimeout) {
+                clearTimeout(userIdleTimeout);
+            }
+
+            // Start (or restart) the 5-second idle timer
+            userIdleTimeout = setTimeout(() => {
+                // User has been silent for 5 seconds → now Isabella can think
+                triggerBotReply();
+            }, USER_IDLE_PAUSE);
 
             // Send to backend
             try {
@@ -314,56 +322,49 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: msg, convo_id: convoId })
                 });
-
-                // Start realistic thinking delay before showing typing indicator
-                const thinkingDelay = getThinkingDelay();
-                currentThinkingTimeout = setTimeout(() => {
-                    triggerBotReply();
-                }, thinkingDelay);
-
             } catch (err) {
                 console.error('Send error:', err);
-                addMessage("Couldn't send... try again", 'received');
             } finally {
                 input.focus();
             }
         }
 
         async function triggerBotReply() {
-            // Show typing indicator for 2.5–5 seconds
+            // Clear any existing timeouts
+            if (thinkingTimeout) clearTimeout(thinkingTimeout);
+
+            const thinkingDelay = getThinkingDelay();
             const typingDuration = getTypingDuration();
-            typingIndicator.classList.add('visible');
 
-            try {
-                const res = await fetch('/api/reply', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ convo_id: convoId })
-                });
+            // Start Isabella's thinking delay
+            thinkingTimeout = setTimeout(() => {
+                typingIndicator.classList.add('visible');
 
-                const data = await res.json();
-
-                // Hide typing indicator after the randomized duration
-                setTimeout(() => {
+                // After typing duration, fetch and show reply
+                setTimeout(async () => {
                     typingIndicator.classList.remove('visible');
 
-                    // Show replies with small natural gaps
-                    data.replies.forEach((bubble, i) => {
-                        setTimeout(() => {
-                            addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
-                            messagesHistory.push({ role: 'assistant', content: bubble });
-                            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-                        }, i * 850);
-                    });
-                }, typingDuration);
+                    try {
+                        const res = await fetch('/api/reply', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ convo_id: convoId })
+                        });
+                        const data = await res.json();
 
-            } catch (err) {
-                console.error(err);
-                typingIndicator.classList.remove('visible');
-                addMessage("Sorry… got distracted for a sec", 'received');
-                messagesHistory.push({ role: 'assistant', content: "Sorry… got distracted for a sec" });
-                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-            }
+                        data.replies.forEach((bubble, i) => {
+                            setTimeout(() => {
+                                addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
+                                messagesHistory.push({ role: 'assistant', content: bubble });
+                                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+                            }, i * 850);
+                        });
+                    } catch (err) {
+                        console.error(err);
+                        addMessage("Sorry… got distracted for a sec", 'received');
+                    }
+                }, typingDuration);
+            }, thinkingDelay);
         }
 
         function addMessage(text, type, mediaUrl = null) {
