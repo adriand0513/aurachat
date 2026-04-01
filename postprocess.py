@@ -22,7 +22,7 @@ def clean_reply(text: str) -> str:
     text = re.sub(r'\s{2,}', ' ', text)
 
     # ── Remove banned cringe / overused words ──────────────────────────────────
-    banned = r'\b(boo||baby|chaos|cutie|princess|wassup|wyd|sup|hiii|miss ?me|already\??|fr|lma?o+|omg+|no ?way|lowkey|highkey|vibes?|energy)\b'
+    banned = r'\b(boo||baby|babe|chaos|cutie|princess|wassup|wyd|sup|hiii|miss ?me|already\??|fr|lma?o+|omg+|no ?way|lowkey|highkey|vibes?|energy)\b'
     text = re.sub(banned, '', text, flags=re.IGNORECASE)
 
     # ── Severely limit emojis — max 1, and remove most ─────────────────────────
