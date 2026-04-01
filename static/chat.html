@@ -16,9 +16,7 @@
             --text-muted: #bb99cc;
             --input-bg: rgba(50, 20, 80, 0.6);
         }
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
-
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
@@ -28,7 +26,6 @@
             flex-direction: column;
             overflow: hidden;
         }
-
         .chat-header {
             padding: 14px 20px;
             background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
@@ -39,14 +36,12 @@
             justify-content: space-between;
             z-index: 100;
         }
-
         .avatar-container {
             position: relative;
             width: 48px;
             height: 48px;
             cursor: pointer;
         }
-
         .avatar {
             width: 100%;
             height: 100%;
@@ -56,7 +51,6 @@
             border: 2px solid var(--accent-purple);
             box-shadow: 0 0 16px var(--accent-glow);
         }
-
         #messages-container {
             flex: 1;
             overflow-y: auto;
@@ -65,9 +59,8 @@
             flex-direction: column;
             gap: 14px;
             background: linear-gradient(to bottom, rgba(13,0,21,0.6), transparent);
-            min-height: 0; /* critical for flex scrolling */
+            min-height: 0;
         }
-
         .message {
             max-width: 82%;
             padding: 12px 18px;
@@ -75,21 +68,18 @@
             font-size: 15.5px;
             line-height: 1.45;
         }
-
         .sent {
             background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
             color: white;
             align-self: flex-end;
             border-bottom-right-radius: 8px;
         }
-
         .received {
             background: rgba(30,20,50,0.9);
             color: white;
             align-self: flex-start;
             border-bottom-left-radius: 8px;
         }
-
         .input-area {
             padding: 14px 20px;
             background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
@@ -102,7 +92,6 @@
             position: relative;
             z-index: 1000;
         }
-
         #user-input {
             flex: 1;
             padding: 14px 22px;
@@ -112,12 +101,10 @@
             color: white;
             font-size: 16px;
         }
-
         #user-input:focus {
             outline: none;
             box-shadow: 0 0 0 3px rgba(195,0,255,0.3);
         }
-
         #send-btn {
             width: 52px;
             height: 52px;
@@ -128,12 +115,10 @@
             font-size: 24px;
             cursor: pointer;
         }
-
         #send-btn:hover {
             transform: scale(1.1);
             box-shadow: 0 0 24px var(--accent-glow);
         }
-
         .typing-indicator {
             display: flex;
             align-items: center;
@@ -149,12 +134,10 @@
             opacity: 0;
             transition: opacity 0.3s ease;
         }
-
         .typing-indicator.visible {
             visibility: visible;
             opacity: 1;
         }
-
         .typing-dot {
             width: 8px;
             height: 8px;
@@ -162,15 +145,12 @@
             border-radius: 50%;
             animation: typing 1.4s infinite ease-in-out;
         }
-
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
         @keyframes typing {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
         }
-
         #clear-chat-btn {
             padding: 8px 16px;
             background: linear-gradient(135deg, var(--danger), #d50000);
@@ -181,12 +161,9 @@
             font-size: 14px;
             font-weight: 600;
         }
-
         #clear-chat-btn:hover {
             transform: scale(1.05);
         }
-
-        /* Full Avatar Modal */
         .avatar-modal {
             display: none;
             position: fixed;
@@ -197,11 +174,9 @@
             align-items: center;
             justify-content: center;
         }
-
         .avatar-modal.show {
             display: flex;
         }
-
         .avatar-modal-content {
             max-width: 90vw;
             max-height: 90vh;
@@ -209,7 +184,6 @@
             box-shadow: 0 0 60px rgba(195,0,255,0.7);
             object-fit: contain;
         }
-
         .avatar-modal-close {
             position: absolute;
             top: 30px;
@@ -220,7 +194,6 @@
             transition: all 0.3s;
             text-shadow: 0 0 10px rgba(0,0,0,0.8);
         }
-
         .avatar-modal-close:hover {
             color: var(--accent-pink);
             transform: scale(1.15);
@@ -243,9 +216,7 @@
     <!-- Full Avatar Modal -->
     <div id="avatar-modal" class="avatar-modal">
         <span class="avatar-modal-close" onclick="closeFullAvatar()">×</span>
-        <div class="avatar-modal-inner">
-            <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png" alt="Isabella">
-        </div>
+        <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png" alt="Isabella">
     </div>
 
     <div id="messages-container">
@@ -269,9 +240,10 @@
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-
+        
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
+        let currentThinkingTimeout = null;
 
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -300,15 +272,42 @@
             }
         }
 
+        // Calculate realistic thinking delay (10-25 seconds)
+        function getThinkingDelay() {
+            // Base delay between 10 and 25 seconds
+            let delay = 10000 + Math.random() * 15000;
+            
+            // Slightly longer delay for longer or more flirty messages
+            const lastMessage = messagesHistory[messagesHistory.length - 1];
+            if (lastMessage && lastMessage.role === 'user') {
+                const msgLength = lastMessage.content.length;
+                if (msgLength > 60) delay += 4000;           // longer messages = more thinking
+                if (/baby|sexy|beautiful|want|dream|love/i.test(lastMessage.content)) {
+                    delay += 3000; // slightly longer for flirty messages
+                }
+            }
+            return Math.floor(delay);
+        }
+
+        // Calculate typing indicator duration (2.5 - 5 seconds)
+        function getTypingDuration() {
+            return 2500 + Math.random() * 2500;
+        }
+
         async function sendMessage() {
             const msg = input.value.trim();
             if (!msg) return;
 
+            // Add user message immediately
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
 
+            // Clear any previous thinking timeout
+            if (currentThinkingTimeout) clearTimeout(currentThinkingTimeout);
+
+            // Send to backend
             try {
                 await fetch('/api/send', {
                     method: 'POST',
@@ -316,7 +315,12 @@
                     body: JSON.stringify({ message: msg, convo_id: convoId })
                 });
 
-                setTimeout(triggerBotReply, 600);
+                // Start realistic thinking delay before showing typing indicator
+                const thinkingDelay = getThinkingDelay();
+                currentThinkingTimeout = setTimeout(() => {
+                    triggerBotReply();
+                }, thinkingDelay);
+
             } catch (err) {
                 console.error('Send error:', err);
                 addMessage("Couldn't send... try again", 'received');
@@ -326,6 +330,8 @@
         }
 
         async function triggerBotReply() {
+            // Show typing indicator for 2.5–5 seconds
+            const typingDuration = getTypingDuration();
             typingIndicator.classList.add('visible');
 
             try {
@@ -337,15 +343,19 @@
 
                 const data = await res.json();
 
-                typingIndicator.classList.remove('visible');
+                // Hide typing indicator after the randomized duration
+                setTimeout(() => {
+                    typingIndicator.classList.remove('visible');
 
-                data.replies.forEach((bubble, i) => {
-                    setTimeout(() => {
-                        addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
-                        messagesHistory.push({ role: 'assistant', content: bubble });
-                        localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-                    }, i * 800);
-                });
+                    // Show replies with small natural gaps
+                    data.replies.forEach((bubble, i) => {
+                        setTimeout(() => {
+                            addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
+                            messagesHistory.push({ role: 'assistant', content: bubble });
+                            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+                        }, i * 850);
+                    });
+                }, typingDuration);
 
             } catch (err) {
                 console.error(err);
