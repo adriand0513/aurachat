@@ -275,7 +275,7 @@
         // Calculate realistic thinking delay (10-25 seconds)
         function getThinkingDelay() {
             // Base delay between 10 and 25 seconds
-            let delay = 10000 + Math.random() * 15000;
+            let delay = 8000 + Math.random() * 10000;
             
             // Slightly longer delay for longer or more flirty messages
             const lastMessage = messagesHistory[messagesHistory.length - 1];
