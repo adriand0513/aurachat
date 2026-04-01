@@ -13,8 +13,8 @@ def clean_reply(text: str) -> str:
     text = re.sub(r'\*.*?\*', '', text)            # kill *action* stage directions
     text = re.sub(r'".*?"', '', text)              # remove quoted stage directions / inner monologue
 
-    # ── Replace various dashes → ellipsis (very common in real texting) ────────
-    text = re.sub(r'[-—–]+', '…', text)
+    # ── Replace various dashes → space (very common in real texting) ────────
+    text = re.sub(r'[-—–]+', ' ', text)
 
     # Normalize runs of punctuation & ellipses
     text = re.sub(r'[.?!…]{3,}', '…', text)        # .... → …
@@ -22,7 +22,7 @@ def clean_reply(text: str) -> str:
     text = re.sub(r'\s{2,}', ' ', text)
 
     # ── Remove banned cringe / overused words ──────────────────────────────────
-    banned = r'\b(boo|papi|baby|cutie|princess|wassup|wyd|sup|heyyy|hiii|miss ?me|already\??|fr|lma?o+|omg+|no ?way|lowkey|highkey|vibes?|energy)\b'
+    banned = r'\b(boo||baby|chaos|cutie|princess|wassup|wyd|sup|hiii|miss ?me|already\??|fr|lma?o+|omg+|no ?way|lowkey|highkey|vibes?|energy)\b'
     text = re.sub(banned, '', text, flags=re.IGNORECASE)
 
     # ── Severely limit emojis — max 1, and remove most ─────────────────────────
@@ -46,6 +46,6 @@ def clean_reply(text: str) -> str:
 
     # Very light random human noise (optional — can be removed if too much)
     if random.random() < 0.12 and not text.endswith(('…', '.', '!', '?')):
-        text += random.choice([' …', ' lol', ' deadass', ''])
+        text += random.choice([' …', ' lol', ''])
 
     return text.strip()
