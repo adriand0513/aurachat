@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Isabella</title>
+    <title>Aurachat</title>
     <link rel="stylesheet" href="/static/style.css" />
     <style>
         :root {
@@ -244,10 +244,10 @@
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
         
-        let userIdleTimeout = null;           // Timer for "user is done typing"
-        let thinkingTimeout = null;           // Timer for Isabella's thinking delay
-        
-        const USER_IDLE_PAUSE = 5000;         // 5 seconds - change this if you want
+        let userIdleTimeout = null;      // 5-second pause before Isabella starts thinking
+        let thinkingTimeout = null;      // Isabella's thinking delay
+
+        const USER_IDLE_PAUSE = 5000;    // 5 seconds - user must stop sending
 
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -276,7 +276,7 @@
             }
         }
 
-        // Calculate Isabella's thinking delay (10-25 seconds)
+        // Isabella's thinking delay (10-25 seconds)
         function getThinkingDelay() {
             let delay = 10000 + Math.random() * 15000;
             const lastMessage = messagesHistory[messagesHistory.length - 1];
@@ -289,33 +289,32 @@
             return Math.floor(delay);
         }
 
-        // Calculate typing indicator duration (2.5 - 5 seconds)
+        // Typing indicator duration (2.5 - 5 seconds)
         function getTypingDuration() {
             return 2500 + Math.random() * 2500;
+        }
+
+        // Gap between Isabella's multiple bubbles (3 - 5.5 seconds)
+        function getBubbleGap() {
+            return 3000 + Math.random() * 2500;   // 3 to 5.5 seconds
         }
 
         async function sendMessage() {
             const msg = input.value.trim();
             if (!msg) return;
 
-            // Add user message immediately
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
 
-            // Reset the user idle timer every time a new message is sent
-            if (userIdleTimeout) {
-                clearTimeout(userIdleTimeout);
-            }
+            // Reset user idle timer every time a new message arrives
+            if (userIdleTimeout) clearTimeout(userIdleTimeout);
 
-            // Start (or restart) the 5-second idle timer
             userIdleTimeout = setTimeout(() => {
-                // User has been silent for 5 seconds → now Isabella can think
                 triggerBotReply();
             }, USER_IDLE_PAUSE);
 
-            // Send to backend
             try {
                 await fetch('/api/send', {
                     method: 'POST',
@@ -330,17 +329,14 @@
         }
 
         async function triggerBotReply() {
-            // Clear any existing timeouts
             if (thinkingTimeout) clearTimeout(thinkingTimeout);
 
             const thinkingDelay = getThinkingDelay();
             const typingDuration = getTypingDuration();
 
-            // Start Isabella's thinking delay
             thinkingTimeout = setTimeout(() => {
                 typingIndicator.classList.add('visible');
 
-                // After typing duration, fetch and show reply
                 setTimeout(async () => {
                     typingIndicator.classList.remove('visible');
 
@@ -352,12 +348,14 @@
                         });
                         const data = await res.json();
 
+                        // Show bubbles with realistic gaps
                         data.replies.forEach((bubble, i) => {
+                            const delay = i === 0 ? 0 : getBubbleGap();   // First bubble immediate, rest delayed
                             setTimeout(() => {
                                 addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
                                 messagesHistory.push({ role: 'assistant', content: bubble });
                                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-                            }, i * 850);
+                            }, i * 100 + delay);   // Small base + realistic gap
                         });
                     } catch (err) {
                         console.error(err);
