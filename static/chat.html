@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Aurachat</title>
+    <title>Isabella</title>
     <link rel="stylesheet" href="/static/style.css" />
     <style>
         :root {
@@ -244,8 +244,8 @@
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
         
-        let userIdleTimeout = null;      // 5-second pause before Isabella starts thinking
-        let thinkingTimeout = null;      // Isabella's thinking delay
+        let userIdleTimeout = null;
+        let thinkingTimeout = null;
 
         const USER_IDLE_PAUSE = 5000;    // 5 seconds - user must stop sending
 
@@ -276,7 +276,6 @@
             }
         }
 
-        // Isabella's thinking delay (10-25 seconds)
         function getThinkingDelay() {
             let delay = 10000 + Math.random() * 15000;
             const lastMessage = messagesHistory[messagesHistory.length - 1];
@@ -289,14 +288,12 @@
             return Math.floor(delay);
         }
 
-        // Typing indicator duration (2.5 - 5 seconds)
         function getTypingDuration() {
             return 2500 + Math.random() * 2500;
         }
 
-        // Gap between Isabella's multiple bubbles (3 - 5.5 seconds)
         function getBubbleGap() {
-            return 3000 + Math.random() * 2500;   // 3 to 5.5 seconds
+            return 3000 + Math.random() * 2500;   // 3 to 5.5 seconds between bubbles
         }
 
         async function sendMessage() {
@@ -308,7 +305,6 @@
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
 
-            // Reset user idle timer every time a new message arrives
             if (userIdleTimeout) clearTimeout(userIdleTimeout);
 
             userIdleTimeout = setTimeout(() => {
@@ -332,36 +328,41 @@
             if (thinkingTimeout) clearTimeout(thinkingTimeout);
 
             const thinkingDelay = getThinkingDelay();
-            const typingDuration = getTypingDuration();
 
-            thinkingTimeout = setTimeout(() => {
+            thinkingTimeout = setTimeout(async () => {
+                // Show typing indicator and KEEP it visible during the entire reply
                 typingIndicator.classList.add('visible');
 
-                setTimeout(async () => {
-                    typingIndicator.classList.remove('visible');
+                try {
+                    const res = await fetch('/api/reply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ convo_id: convoId })
+                    });
+                    const data = await res.json();
 
-                    try {
-                        const res = await fetch('/api/reply', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ convo_id: convoId })
-                        });
-                        const data = await res.json();
+                    // Show all bubbles while typing indicator stays on
+                    for (let i = 0; i < data.replies.length; i++) {
+                        const bubble = data.replies[i];
+                        const isLast = i === data.replies.length - 1;
+                        const delay = i === 0 ? 0 : getBubbleGap();
 
-                        // Show bubbles with realistic gaps
-                        data.replies.forEach((bubble, i) => {
-                            const delay = i === 0 ? 0 : getBubbleGap();   // First bubble immediate, rest delayed
+                        await new Promise(resolve => {
                             setTimeout(() => {
-                                addMessage(bubble, 'received', i === data.replies.length - 1 ? data.voice_note : null);
+                                addMessage(bubble, 'received', isLast ? data.voice_note : null);
                                 messagesHistory.push({ role: 'assistant', content: bubble });
                                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-                            }, i * 100 + delay);   // Small base + realistic gap
+                                resolve();
+                            }, delay);
                         });
-                    } catch (err) {
-                        console.error(err);
-                        addMessage("Sorry… got distracted for a sec", 'received');
                     }
-                }, typingDuration);
+                } catch (err) {
+                    console.error(err);
+                    addMessage("Sorry… got distracted for a sec", 'received');
+                } finally {
+                    // Only hide typing indicator after ALL bubbles are sent
+                    typingIndicator.classList.remove('visible');
+                }
             }, thinkingDelay);
         }
 
