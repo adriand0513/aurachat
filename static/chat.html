@@ -307,7 +307,7 @@
         let userIdleTimeout = null;
         let thinkingTimeout = null;
 
-        const USER_IDLE_PAUSE = 6000;   // 6 seconds as requested
+        const USER_IDLE_PAUSE = 6000;   // 6 seconds
 
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -324,8 +324,14 @@
             input.focus();
         });
 
+        // Improved Home button - forces clean navigation
         function goToHome() {
-            window.location.href = '/';
+            // Clear all chat state
+            localStorage.removeItem('convo_id');
+            localStorage.removeItem('messages_history');
+            
+            // Force full page navigation (replace prevents back-button issues)
+            window.location.replace('/');
         }
 
         function clearConversation() {
