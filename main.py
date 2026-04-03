@@ -146,18 +146,18 @@ async def send_message(body: Dict[str, str] = Body(...)):
 @app.post("/api/reply")
 async def generate_reply(body: Dict[str, str] = Body(...)):
     convo_id = body.get("convo_id")
-
     if not convo_id:
         raise HTTPException(400, "convo_id required")
 
     if is_rate_limited(convo_id):
         return JSONResponse(
-            {"replies": ["Slow down... let's not rush this 😏"], "voice_note": ""},
+            {"replies": [], "voice_note": ""},   # Return nothing to user
             status_code=429
         )
 
     log_prefix = f"Convo {convo_id}"
     context = get_nyc_context()
+
     logger.info(f"{log_prefix} Generating reply | NYC: {context['time']} | Weather: {context['weather']}")
 
     history = get_history(convo_id)
@@ -177,6 +177,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         "Authorization": f"Bearer {XAI_API_KEY}",
         "Content-Type": "application/json"
     }
+
     data = {
         "model": XAI_MODEL,
         "messages": messages,
@@ -188,31 +189,33 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=35)
         resp.raise_for_status()
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logger.error(f"{log_prefix} xAI failed: {str(e)}")
-        fallback = "Sorry, got a little lost in my head for a sec... what were we saying? 😅"
-        save_message(convo_id, {"role": "assistant", "content": fallback})
-        return {"replies": [fallback], "voice_note": ""}
 
+    except Exception as e:
+        # CRITICAL: Log everything, send NOTHING to user
+        logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
+        logger.error(f"{log_prefix} Full error details: {type(e).__name__}")
+        if hasattr(e, 'response') and e.response is not None:
+            logger.error(f"{log_prefix} XAI response body: {e.response.text[:500]}")
+
+        # Return empty response → frontend shows nothing
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
+
+    # Normal path
     reply = clean_reply(raw_reply)
     bubbles = split_into_bubbles(reply)
 
     voice_note = ""
-    emotional_keywords = [
-        "miss", "love", "kiss", "horny", "sexy", "touch", "body", "want",
-        "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"
-    ]
+    emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
     if has_emotion and random.random() < 0.75 and bubbles:
         last_bubble = bubbles[-1]
         voice_note = generate_voice_note(last_bubble)
-        logger.info(f"{log_prefix} Voice note generated for last bubble")
+        logger.info(f"{log_prefix} Voice note generated")
 
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
     return {"replies": bubbles, "voice_note": voice_note}
-
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
