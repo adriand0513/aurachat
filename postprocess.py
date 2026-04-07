@@ -11,51 +11,48 @@ def clean_reply(text: str) -> str:
     original = text
     text = text.strip()
 
-    # ── Remove ALL special model tokens (critical for <|eos|>) ───────────────
-    text = re.sub(r"<\|[^>]*\|>", "", text)          # catches <|eos|>, <|endoftext|>, etc.
+    # ── Critical: Remove ALL special model tokens ─────────────────────────────
+    text = re.sub(r"<\|[^>]*\|>", "", text)          # catches <|eos|>, etc.
     text = re.sub(r"__.*?__", "", text)
 
-    # ── Broad AI leak / meta / refusal removal ───────────────────────────────
-    text = re.sub(r'(?i)(as (an )?ai|language model|llm|chatbot|bot|grok|i\'m (not real|programmed|an ai|artificial|virtual))', '', text)
-    text = re.sub(r'(?i)(i can\'t assist|against policy|inappropriate|ethical reasons|sorry i can\'t|as an ai)', '', text)
+    # ── Strong but targeted AI leak / meta removal ───────────────────────────
+    text = re.sub(r'(?i)(as (an )?ai|language model|llm|chatbot|bot|grok|i\'m (not real|programmed|an ai|artificial|virtual|digital assistant))', '', text)
+    text = re.sub(r'(?i)(i can\'t assist|against policy|inappropriate|ethical reasons|sorry i can\'t)', '', text)
 
     # ── Remove thinking tags, actions, stage directions ─────────────────────
     text = re.sub(r'\[.*?]\s*', '', text)
     text = re.sub(r'\*.*?\*', '', text)
     text = re.sub(r'".*?"', '', text)
 
-    # ── Replace dashes with a space ────────────────────────────────────────
+    # ── Light punctuation normalization ─────────────────────────────────────
     text = re.sub(r'[-—–]+', ' ', text)
-
-    # Normalize punctuation
     text = re.sub(r'[.?!…]{3,}', '…', text)
     text = re.sub(r'[!？]{2,}', '!', text)
 
-    # ── Remove banned cringe words ──────────────────────────────────────────
-    banned = r'\b(boo|babe|cutie|wassup|wyd|sup|hiii|miss ?me|lma?o+|omg+|no ?way|lowkey|highkey|vibes?|energy)\b'
-    text = re.sub(banned, '', text, flags=re.IGNORECASE)
-
-    # ── Limit emojis to maximum 1 ───────────────────────────────────────────
+    # ── Removed heavy banned word list ───────────────────────────────────────
+    # Only keep very light emoji control
     emoji_pattern = r'[\U0001F300-\U0001F9FF]'
     emojis = re.findall(emoji_pattern, text)
     if len(emojis) > 1:
         text = re.sub(emoji_pattern, lambda m: '' if random.random() < 0.7 else m.group(0), text, count=999)
 
-    # ── Smart question mark fix (only for obvious cases) ────────────────────
-    if text.endswith('?') and not any(word in text.lower() for word in ['what', 'how', 'why', 'when', 'where', 'who', 'do you', 'are you', 'can you']):
-        text = text[:-1] + '.'
+    # ── Smart question mark preservation (only fix obvious broken cases) ─────
+    # This helps prevent turning real questions into statements
+    if re.search(r'(what|how|why|when|where|who|do you|are you|can you|would you)', text.lower()) and text.endswith('.'):
+        if not text.endswith(('Mr.', 'Mrs.', 'Dr.', 'Ms.')):
+            text = text[:-1] + '?'
 
     # ── Final cleanup ───────────────────────────────────────────────────────
     text = re.sub(r'\s{2,}', ' ', text)
     text = re.sub(r'\s*\.\s*', '. ', text)
     text = text.strip()
 
-    # Log if we removed significant content
+    # Log if we removed a lot of content (for debugging)
     if len(text) < len(original) * 0.75 or "<|" in original:
         logger.warning(f"Cleaned significant content. Original: {original[:300]}... → Cleaned: {text}")
 
-    # Very light human touch
-    if random.random() < 0.10 and not text.endswith(('…', '.', '!', '?')):
+    # Very light human touch (optional)
+    if random.random() < 0.08 and not text.endswith(('…', '.', '!', '?')):
         text += random.choice([' …', ' lol'])
 
     return text.strip()
