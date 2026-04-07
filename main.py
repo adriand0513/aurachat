@@ -13,8 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
 from collections import defaultdict
-
-from fastapi import FastAPI, HTTPException, Body, status
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -31,7 +30,6 @@ from config import (
     XAI_API_KEY, XAI_API_BASE, XAI_MODEL,
     XAI_TEMPERATURE, XAI_MAX_TOKENS
 )
-
 from prompt import get_system_prompt
 from postprocess import clean_reply
 from voice import generate_voice_note
@@ -86,15 +84,12 @@ def get_nyc_context() -> Dict[str, str]:
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
-
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-
     bubbles = []
     for paragraph in paragraphs:
         if len(paragraph) <= 120:
             bubbles.append(paragraph)
             continue
-
         sentences = re.split(r'(?<=[.!?])\s+', paragraph)
         current = ""
         for sentence in sentences:
@@ -106,7 +101,6 @@ def split_into_bubbles(text: str) -> List[str]:
                 current = sentence + " "
         if current:
             bubbles.append(current.strip())
-
     bubbles = [b.strip() for b in bubbles if b.strip()]
     return bubbles if bubbles else [text.strip()]
 
@@ -128,18 +122,14 @@ async def chat_page():
         return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
 # ── Open Chat Endpoints (Anonymous) ─────────────────────────────────────────
-
 @app.post("/api/send")
 async def send_message(body: Dict[str, str] = Body(...)):
     convo_id = body.get("convo_id")
     message = body.get("message", "").strip()
-
     if not convo_id or not message:
         raise HTTPException(400, "convo_id and message required")
-
     if is_rate_limited(convo_id):
         raise HTTPException(429, "Slow down... let's not rush this 😏")
-
     save_message(convo_id, {"role": "user", "content": message})
     return {"success": True}
 
@@ -150,10 +140,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         raise HTTPException(400, "convo_id required")
 
     if is_rate_limited(convo_id):
-        return JSONResponse(
-            {"replies": [], "voice_note": ""},   # Return nothing to user
-            status_code=429
-        )
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
     log_prefix = f"Convo {convo_id}"
     context = get_nyc_context()
@@ -177,7 +164,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         "Authorization": f"Bearer {XAI_API_KEY}",
         "Content-Type": "application/json"
     }
-
     data = {
         "model": XAI_MODEL,
         "messages": messages,
@@ -185,26 +171,31 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         "max_tokens": XAI_MAX_TOKENS,
     }
 
+    # ── STRENGTHENED XAI FAIL-SAFE ───────────────────────────────────────────
     try:
         resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=35)
         resp.raise_for_status()
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
 
     except Exception as e:
-        # CRITICAL: Log everything, send NOTHING to user
+        # CRITICAL: Log everything in detail, send NOTHING to the user
         logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
-        logger.error(f"{log_prefix} Full error details: {type(e).__name__}")
+        logger.error(f"{log_prefix} Exception type: {type(e).__name__}")
+        
         if hasattr(e, 'response') and e.response is not None:
-            logger.error(f"{log_prefix} XAI response body: {e.response.text[:500]}")
+            logger.error(f"{log_prefix} XAI status code: {e.response.status_code}")
+            logger.error(f"{log_prefix} XAI response body: {e.response.text[:800]}")
+        else:
+            logger.error(f"{log_prefix} No response from XAI (timeout or connection error)")
 
-        # Return empty response → frontend shows nothing
+        # Return empty payload → frontend shows nothing
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
-    # Normal path
+    # ── Normal successful path ───────────────────────────────────────────────
     reply = clean_reply(raw_reply)
     bubbles = split_into_bubbles(reply)
-
     voice_note = ""
+
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
@@ -217,5 +208,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
     return {"replies": bubbles, "voice_note": voice_note}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
