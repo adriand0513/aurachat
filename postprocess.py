@@ -11,47 +11,41 @@ def clean_reply(text: str) -> str:
     original = text
     text = text.strip()
 
-    # ── Critical: Remove ALL special model tokens ─────────────────────────────
-    text = re.sub(r"<\|[^>]*\|>", "", text)          # catches <|eos|>, etc.
+    # Critical token removal
+    text = re.sub(r"<\|[^>]*\|>", "", text)
     text = re.sub(r"__.*?__", "", text)
 
-    # ── Strong but targeted AI leak / meta removal ───────────────────────────
-    text = re.sub(r'(?i)(as (an )?ai|language model|llm|chatbot|bot|grok|i\'m (not real|programmed|an ai|artificial|virtual|digital assistant))', '', text)
-    text = re.sub(r'(?i)(i can\'t assist|against policy|inappropriate|ethical reasons|sorry i can\'t)', '', text)
+    # Strong AI leak protection only
+    text = re.sub(r'(?i)(as (an )?ai|language model|llm|chatbot|bot|grok|i\'m (not real|programmed|an ai|artificial|virtual))', '', text)
+    text = re.sub(r'(?i)(i can\'t assist|against policy|inappropriate|ethical reasons)', '', text)
 
-    # ── Remove thinking tags, actions, stage directions ─────────────────────
+    # Remove thinking tags / actions
     text = re.sub(r'\[.*?]\s*', '', text)
     text = re.sub(r'\*.*?\*', '', text)
     text = re.sub(r'".*?"', '', text)
 
-    # ── Light punctuation normalization ─────────────────────────────────────
+    # Light normalization
     text = re.sub(r'[-—–]+', ' ', text)
     text = re.sub(r'[.?!…]{3,}', '…', text)
     text = re.sub(r'[!？]{2,}', '!', text)
 
-    # ── Removed heavy banned word list ───────────────────────────────────────
-    # Only keep very light emoji control
-    emoji_pattern = r'[\U0001F300-\U0001F9FF]'
-    emojis = re.findall(emoji_pattern, text)
-    if len(emojis) > 1:
-        text = re.sub(emoji_pattern, lambda m: '' if random.random() < 0.7 else m.group(0), text, count=999)
-
-    # ── Smart question mark preservation (only fix obvious broken cases) ─────
-    # This helps prevent turning real questions into statements
-    if re.search(r'(what|how|why|when|where|who|do you|are you|can you|would you)', text.lower()) and text.endswith('.'):
-        if not text.endswith(('Mr.', 'Mrs.', 'Dr.', 'Ms.')):
+    # Smart question mark fix - only fix obvious broken questions
+    # This helps without forcing punctuation on every sentence
+    if re.search(r'(?i)\b(what|how|why|when|where|who|do you|are you|can you|would you|tell me)\b', text.lower()) and text.endswith('.'):
+        # Only add ? if it looks like a real question and doesn't already end with ?
+        if not text.endswith('?') and not any(x in text[-20:].lower() for x in ['mr.', 'mrs.', 'dr.', 'ms.']):
             text = text[:-1] + '?'
 
-    # ── Final cleanup ───────────────────────────────────────────────────────
+    # Final cleanup
     text = re.sub(r'\s{2,}', ' ', text)
     text = re.sub(r'\s*\.\s*', '. ', text)
     text = text.strip()
 
-    # Log if we removed a lot of content (for debugging)
+    # Logging for debugging
     if len(text) < len(original) * 0.75 or "<|" in original:
         logger.warning(f"Cleaned significant content. Original: {original[:300]}... → Cleaned: {text}")
 
-    # Very light human touch (optional)
+    # Light human touch
     if random.random() < 0.08 and not text.endswith(('…', '.', '!', '?')):
         text += random.choice([' …', ' lol'])
 
