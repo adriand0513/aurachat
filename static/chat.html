@@ -368,12 +368,12 @@
 
         async function triggerBotReply() {
             if (thinkingTimeout) clearTimeout(thinkingTimeout);
-
+        
             const thinkingDelay = getThinkingDelay();
-
+        
             thinkingTimeout = setTimeout(async () => {
                 typingIndicator.classList.add('visible');
-
+        
                 try {
                     const res = await fetch('/api/reply', {
                         method: 'POST',
@@ -381,12 +381,18 @@
                         body: JSON.stringify({ convo_id: convoId })
                     });
                     const data = await res.json();
-
+        
+                    // NEW: Immediately hide if nothing came back (XAI failure or empty)
+                    if (!data.replies || data.replies.length === 0) {
+                        typingIndicator.classList.remove('visible');
+                        return;
+                    }
+        
                     for (let i = 0; i < data.replies.length; i++) {
                         const bubble = data.replies[i];
                         const isLast = i === data.replies.length - 1;
                         const delay = i === 0 ? 0 : getBubbleGap();
-
+        
                         await new Promise(resolve => {
                             setTimeout(() => {
                                 if (isLast && data.voice_note) {
@@ -402,7 +408,6 @@
                     }
                 } catch (err) {
                     console.error(err);
-                    addMessage("Sorry… got distracted for a sec", 'received');
                 } finally {
                     typingIndicator.classList.remove('visible');
                 }
