@@ -196,19 +196,27 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     bubbles = split_into_bubbles(reply)
     voice_note = ""
 
+    # ── STRENGTHENED ELEVENLABS FAIL-SAFE ───────────────────────────────────
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
     if has_emotion and random.random() < 0.75 and bubbles:
-        last_bubble = bubbles[-1]
-        voice_note = generate_voice_note(last_bubble)
-        logger.info(f"{log_prefix} Voice note generated")
+        try:
+            last_bubble = bubbles[-1]
+            voice_note = generate_voice_note(last_bubble)
+            if voice_note:
+                logger.info(f"{log_prefix} Voice note generated successfully")
+            else:
+                logger.warning(f"{log_prefix} Voice note generation returned empty")
+        except Exception as e:
+            # 100% silent fail - no leak to user, only log
+            logger.error(f"{log_prefix} ElevenLabs FAILURE (likely out of tokens or API error): {str(e)}")
+            voice_note = ""   # Ensure nothing is sent
 
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
     return {"replies": bubbles, "voice_note": voice_note}
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
