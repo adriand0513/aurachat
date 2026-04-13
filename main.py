@@ -33,6 +33,7 @@ from config import (
 from prompt import get_system_prompt
 from postprocess import clean_reply
 from voice import generate_voice_note
+from analytics import router as analytics_router
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 logger.info(f" cwd: {os.getcwd()}")
@@ -44,6 +45,7 @@ logger.info("---")
 
 app = FastAPI(title="Isabella Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.include_router(analytics_router)
 
 # ── Anonymous Memory (simple in-memory for MVP) ─────────────────────────────
 conversations = {}  # convo_id -> list of messages
