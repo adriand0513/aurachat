@@ -12,65 +12,63 @@
             --accent-pink: #ff0099;
             --text: #f8f0ff;
             --text-muted: #bb99cc;
-            --card: rgba(35, 25, 60, 0.95);
+            --card: rgba(35, 25, 60, 0.96);
             --glow: rgba(195, 0, 255, 0.25);
         }
-        * { box-sizing: border-box; }
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
             margin: 0;
-            padding: 24px 20px;
+            padding: 30px 20px;
             min-height: 100vh;
-            line-height: 1.5;
         }
         .container {
-            max-width: 1280px;
+            max-width: 1300px;
             margin: 0 auto;
         }
         header {
             text-align: center;
-            margin-bottom: 50px;
+            margin-bottom: 60px;
         }
         h1 {
-            font-size: 3rem;
-            margin: 0 0 10px 0;
+            font-size: 3.2rem;
+            margin: 0 0 12px 0;
             background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            font-weight: 700;
         }
         .subtitle {
             color: var(--text-muted);
-            font-size: 1.25rem;
+            font-size: 1.3rem;
         }
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 28px;
             margin-bottom: 60px;
         }
         .stat-card {
             background: var(--card);
-            padding: 32px 28px;
+            padding: 36px 28px;
             border-radius: 24px;
             text-align: center;
-            box-shadow: 0 8px 30px var(--glow);
+            box-shadow: 0 10px 35px var(--glow);
             transition: all 0.3s ease;
         }
         .stat-card:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 15px 40px var(--glow);
+            transform: translateY(-8px);
         }
         .stat-card h3 {
-            margin: 0 0 16px 0;
+            margin: 0 0 18px 0;
             color: var(--text-muted);
             font-size: 15px;
             font-weight: 500;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
         }
         .stat-value {
-            font-size: 48px;
+            font-size: 52px;
             font-weight: 700;
             color: var(--accent-purple);
             margin: 0;
@@ -79,16 +77,16 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 28px;
-            margin-bottom: 50px;
+            margin-bottom: 60px;
         }
         .chart-container {
             background: var(--card);
             padding: 32px;
             border-radius: 24px;
-            box-shadow: 0 8px 30px var(--glow);
+            box-shadow: 0 10px 35px var(--glow);
         }
         .chart-title {
-            font-size: 1.5rem;
+            font-size: 1.55rem;
             color: var(--accent-pink);
             margin-bottom: 24px;
             font-weight: 600;
@@ -100,38 +98,45 @@
             background: var(--card);
             padding: 32px;
             border-radius: 24px;
-            box-shadow: 0 8px 30px var(--glow);
+            box-shadow: 0 10px 35px var(--glow);
         }
         .emotion-bar {
             display: flex;
             align-items: center;
-            margin: 20px 0;
+            margin: 22px 0;
         }
         .emotion-name {
-            width: 170px;
+            width: 180px;
             font-weight: 600;
             color: var(--accent-pink);
         }
         .emotion-progress {
             flex: 1;
             height: 16px;
-            background: #1a1a2e;
+            background: #1f1b2e;
             border-radius: 999px;
             overflow: hidden;
             margin: 0 24px;
         }
         .emotion-fill {
             height: 100%;
-            background: linear-gradient(to right, #c300ff, #ff0099);
+            background: linear-gradient(to right, var(--accent-purple), var(--accent-pink));
+        }
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 60px 20px;
+            font-size: 1.1rem;
         }
         .last-updated {
             text-align: center;
             color: var(--text-muted);
-            margin-top: 40px;
+            margin-top: 50px;
             font-size: 1rem;
         }
         @media (max-width: 900px) {
             .chart-row { grid-template-columns: 1fr; }
+            h1 { font-size: 2.6rem; }
         }
     </style>
 </head>
@@ -139,7 +144,7 @@
     <div class="container">
         <header>
             <h1>AuraChat Dashboard</h1>
-            <p class="subtitle">Isabella • Live Conversation Insights</p>
+            <p class="subtitle">Isabella • Conversation Insights</p>
         </header>
 
         <!-- Summary Stats -->
@@ -201,8 +206,21 @@
 
                 new Chart(document.getElementById('hourlyChart'), {
                     type: 'bar',
-                    data: { labels: hourlyLabels, datasets: [{ label: 'Messages', data: hourlyValues, backgroundColor: '#c300ff', borderColor: '#ff0099', borderWidth: 2 }] },
-                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                    data: {
+                        labels: hourlyLabels,
+                        datasets: [{
+                            label: 'Messages',
+                            data: hourlyValues,
+                            backgroundColor: '#c300ff',
+                            borderColor: '#ff0099',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } }
+                    }
                 });
 
                 // Daily Chart
@@ -211,46 +229,52 @@
 
                 new Chart(document.getElementById('dailyChart'), {
                     type: 'line',
-                    data: { 
-                        labels: dailyLabels, 
-                        datasets: [{ 
-                            label: 'Messages per Day', 
-                            data: dailyValues, 
-                            borderColor: '#ff0099', 
-                            backgroundColor: 'rgba(255,0,153,0.15)',
+                    data: {
+                        labels: dailyLabels,
+                        datasets: [{
+                            label: 'Messages per Day',
+                            data: dailyValues,
+                            borderColor: '#ff0099',
+                            backgroundColor: 'rgba(255, 0, 153, 0.1)',
                             tension: 0.4,
-                            borderWidth: 3 
-                        }] 
+                            borderWidth: 3
+                        }]
                     },
                     options: { responsive: true, plugins: { legend: { display: false } } }
                 });
 
-                // Top Emotions
+                // Top Emotions with nice empty state
                 const emotionsDiv = document.getElementById('top-emotions');
                 const topEmotions = data.top_emotions || {};
                 let html = '';
-                Object.entries(topEmotions).forEach(([emotion, count]) => {
-                    const perc = s.total_messages ? Math.round((count / s.total_messages) * 100) : 0;
-                    html += `
-                        <div class="emotion-bar">
-                            <div class="emotion-name">${emotion}</div>
-                            <div class="emotion-progress">
-                                <div class="emotion-fill" style="width: ${perc}%"></div>
+
+                if (Object.keys(topEmotions).length === 0) {
+                    html = `<div class="empty-state">No emotion data yet.<br>Start chatting with Isabella to see insights here.</div>`;
+                } else {
+                    Object.entries(topEmotions).forEach(([emotion, count]) => {
+                        const perc = s.total_messages ? Math.round((count / s.total_messages) * 100) : 0;
+                        html += `
+                            <div class="emotion-bar">
+                                <div class="emotion-name">${emotion}</div>
+                                <div class="emotion-progress">
+                                    <div class="emotion-fill" style="width: ${perc}%"></div>
+                                </div>
+                                <div style="width:80px; text-align:right; font-weight:600;">${count}</div>
                             </div>
-                            <div style="width:80px; text-align:right; font-weight:600;">${count}</div>
-                        </div>
-                    `;
-                });
-                emotionsDiv.innerHTML = html || '<p style="color:#bb99cc; text-align:center; padding:40px 0;">No data yet — start chatting with Isabella to see insights.</p>';
+                        `;
+                    });
+                }
+                emotionsDiv.innerHTML = html;
 
             } catch (err) {
                 console.error(err);
-                document.getElementById('top-emotions').innerHTML = `<p style="color:red; text-align:center;">Failed to load dashboard.<br>Check server logs.</p>`;
+                document.getElementById('top-emotions').innerHTML = 
+                    `<div class="empty-state" style="color:red;">Failed to load dashboard data.<br>Please check server logs.</div>`;
             }
         }
 
         loadDashboard();
-        setInterval(loadDashboard, 30000); // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000); // Auto refresh every 30 seconds
     </script>
 </body>
 </html>
