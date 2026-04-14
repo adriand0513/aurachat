@@ -28,7 +28,7 @@ load_dotenv()
 from config import (
     ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID,
     XAI_API_KEY, XAI_API_BASE, XAI_MODEL,
-    XAI_TEMPERATURE, XAI_MAX_TOKENS
+    XAI_TEMPERATURE, XAI_MAX_TOKENS 
 )
 from prompt import get_system_prompt
 from postprocess import clean_reply
