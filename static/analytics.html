@@ -3,272 +3,37 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>AuraChat • Dashboard</title>
-    <h2 style="color: #ff0099; text-align: center;">TEST VERSION - SHOULD BE VISIBLE</h2>
+    <title>AuraChat Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --bg: #0d0015;
-            --accent-purple: #c300ff;
-            --accent-pink: #ff0099;
-            --text: #f8f0ff;
-            --text-muted: #bb99cc;
-            --card: rgba(35, 25, 60, 0.96);
-            --glow: rgba(195, 0, 255, 0.25);
-        }
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 30px 20px;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 1300px;
-            margin: 0 auto;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 60px;
-        }
-        h1 {
-            font-size: 3.2rem;
-            margin: 0 0 12px 0;
-            background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 700;
-        }
-        .subtitle {
-            color: var(--text-muted);
-            font-size: 1.3rem;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 28px;
-            margin-bottom: 60px;
-        }
-        .stat-card {
-            background: var(--card);
-            padding: 36px 28px;
-            border-radius: 24px;
-            text-align: center;
-            box-shadow: 0 10px 35px var(--glow);
-            transition: all 0.3s ease;
-        }
-        .stat-card:hover {
-            transform: translateY(-8px);
-        }
-        .stat-card h3 {
-            margin: 0 0 18px 0;
-            color: var(--text-muted);
-            font-size: 15px;
-            font-weight: 500;
-            letter-spacing: 1px;
-        }
-        .stat-value {
-            font-size: 52px;
-            font-weight: 700;
-            color: var(--accent-purple);
-            margin: 0;
-        }
-        .chart-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 28px;
-            margin-bottom: 60px;
-        }
-        .chart-container {
-            background: var(--card);
-            padding: 32px;
-            border-radius: 24px;
-            box-shadow: 0 10px 35px var(--glow);
-        }
-        .chart-title {
-            font-size: 1.55rem;
-            color: var(--accent-pink);
-            margin-bottom: 24px;
-            font-weight: 600;
-        }
-        canvas {
-            max-height: 420px;
-        }
-        .emotions-section {
-            background: var(--card);
-            padding: 32px;
-            border-radius: 24px;
-            box-shadow: 0 10px 35px var(--glow);
-        }
-        .emotion-bar {
-            display: flex;
-            align-items: center;
-            margin: 22px 0;
-        }
-        .emotion-name {
-            width: 180px;
-            font-weight: 600;
-            color: var(--accent-pink);
-        }
-        .emotion-progress {
-            flex: 1;
-            height: 16px;
-            background: #1f1b2e;
-            border-radius: 999px;
-            overflow: hidden;
-            margin: 0 24px;
-        }
-        .emotion-fill {
-            height: 100%;
-            background: linear-gradient(to right, var(--accent-purple), var(--accent-pink));
-        }
-        .last-updated {
-            text-align: center;
-            color: var(--text-muted);
-            margin-top: 50px;
-            font-size: 1rem;
-        }
-        @media (max-width: 900px) {
-            .chart-row { grid-template-columns: 1fr; }
-            h1 { font-size: 2.6rem; }
-        }
+        body { background: #0d0015; color: #f8f0ff; font-family: system-ui; padding: 30px; text-align: center; }
+        h1 { color: #ff0099; font-size: 2.8rem; }
+        .card { background: rgba(35,25,60,0.9); padding: 30px; border-radius: 20px; margin: 20px auto; max-width: 800px; }
+        .error { color: #ff3366; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>AuraChat Dashboard</h1>
-            <p class="subtitle">Isabella • Live Conversation Insights</p>
-        </header>
-
-        <!-- Summary Stats -->
-        <div class="stats-grid" id="summary-stats"></div>
-
-        <!-- Charts -->
-        <div class="chart-row">
-            <div class="chart-container">
-                <div class="chart-title">Hourly Activity</div>
-                <canvas id="hourlyChart"></canvas>
-            </div>
-            <div class="chart-container">
-                <div class="chart-title">Daily Activity (Last 14 Days)</div>
-                <canvas id="dailyChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Top Emotions -->
-        <div class="emotions-section">
-            <div class="chart-title">Top Emotions Isabella Sends</div>
-            <div id="top-emotions"></div>
-        </div>
-
-        <div class="last-updated" id="last-updated">Last updated just now</div>
+    <h1>AuraChat Dashboard</h1>
+    <p>Isabella • Live Insights</p>
+    
+    <div class="card" id="content">
+        <p>Loading data...</p>
     </div>
 
     <script>
         const pw = new URLSearchParams(window.location.search).get('pw');
 
-        async function loadDashboard() {
+        async function loadData() {
             try {
-                const res = await fetch(`/analytics?pw=${pw}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
+                const res = await fetch(`/analytics/data?pw=${pw}`);
                 const data = await res.json();
-                const s = data.summary || {};
-
-                // Summary Cards
-                document.getElementById('summary-stats').innerHTML = `
-                    <div class="stat-card">
-                        <h3>Total Conversations</h3>
-                        <p class="stat-value">${s.total_conversations || 0}</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Total Messages</h3>
-                        <p class="stat-value">${s.total_messages || 0}</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Active Today</h3>
-                        <p class="stat-value">${s.active_today || 0}</p>
-                    </div>
-                `;
-
-                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-
-                // Hourly Chart
-                const hourlyLabels = Array.from({length: 24}, (_, i) => `${i.toString().padStart(2, '0')}:00`);
-                const hourlyValues = hourlyLabels.map(h => (data.hourly_activity || {})[h.slice(0,2)] || 0);
-
-                new Chart(document.getElementById('hourlyChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: hourlyLabels,
-                        datasets: [{
-                            label: 'Messages',
-                            data: hourlyValues,
-                            backgroundColor: '#c300ff',
-                            borderColor: '#ff0099',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true } }
-                    }
-                });
-
-                // Daily Chart
-                const dailyLabels = Object.keys(data.daily_activity || {});
-                const dailyValues = Object.values(data.daily_activity || {});
-
-                new Chart(document.getElementById('dailyChart'), {
-                    type: 'line',
-                    data: {
-                        labels: dailyLabels,
-                        datasets: [{
-                            label: 'Messages per Day',
-                            data: dailyValues,
-                            borderColor: '#ff0099',
-                            backgroundColor: 'rgba(255, 0, 153, 0.1)',
-                            tension: 0.4,
-                            borderWidth: 3
-                        }]
-                    },
-                    options: { responsive: true, plugins: { legend: { display: false } } }
-                });
-
-                // Top Emotions
-                const emotionsDiv = document.getElementById('top-emotions');
-                const topEmotions = data.top_emotions || {};
-                let html = '';
-                if (Object.keys(topEmotions).length === 0) {
-                    html = `<p style="color:#bb99cc; text-align:center; padding:60px 0;">No emotion data yet.<br>Start chatting to see insights.</p>`;
-                } else {
-                    Object.entries(topEmotions).forEach(([emotion, count]) => {
-                        const perc = s.total_messages ? Math.round((count / s.total_messages) * 100) : 0;
-                        html += `
-                            <div class="emotion-bar">
-                                <div class="emotion-name">${emotion}</div>
-                                <div class="emotion-progress">
-                                    <div class="emotion-fill" style="width: ${perc}%"></div>
-                                </div>
-                                <div style="width:80px; text-align:right; font-weight:600;">${count}</div>
-                            </div>
-                        `;
-                    });
-                }
-                emotionsDiv.innerHTML = html;
-
-            } catch (err) {
-                console.error(err);
-                document.getElementById('top-emotions').innerHTML = 
-                    `<p style="color:red; text-align:center;">Failed to load dashboard data.<br>Please check server logs.</p>`;
+                document.getElementById('content').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (e) {
+                document.getElementById('content').innerHTML = `<p class="error">Failed to load data. Please check logs.</p>`;
             }
         }
 
-        loadDashboard();
-        setInterval(loadDashboard, 30000); // Auto-refresh every 30 seconds
+        loadData();
     </script>
 </body>
 </html>
