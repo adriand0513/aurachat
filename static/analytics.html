@@ -122,12 +122,6 @@
             height: 100%;
             background: linear-gradient(to right, var(--accent-purple), var(--accent-pink));
         }
-        .empty-state {
-            text-align: center;
-            color: var(--text-muted);
-            padding: 60px 20px;
-            font-size: 1.1rem;
-        }
         .last-updated {
             text-align: center;
             color: var(--text-muted);
@@ -144,7 +138,7 @@
     <div class="container">
         <header>
             <h1>AuraChat Dashboard</h1>
-            <p class="subtitle">Isabella • Conversation Insights</p>
+            <p class="subtitle">Isabella • Live Conversation Insights</p>
         </header>
 
         <!-- Summary Stats -->
@@ -243,13 +237,12 @@
                     options: { responsive: true, plugins: { legend: { display: false } } }
                 });
 
-                // Top Emotions with nice empty state
+                // Top Emotions
                 const emotionsDiv = document.getElementById('top-emotions');
                 const topEmotions = data.top_emotions || {};
                 let html = '';
-
                 if (Object.keys(topEmotions).length === 0) {
-                    html = `<div class="empty-state">No emotion data yet.<br>Start chatting with Isabella to see insights here.</div>`;
+                    html = `<p style="color:#bb99cc; text-align:center; padding:60px 0;">No emotion data yet.<br>Start chatting to see insights.</p>`;
                 } else {
                     Object.entries(topEmotions).forEach(([emotion, count]) => {
                         const perc = s.total_messages ? Math.round((count / s.total_messages) * 100) : 0;
@@ -269,12 +262,12 @@
             } catch (err) {
                 console.error(err);
                 document.getElementById('top-emotions').innerHTML = 
-                    `<div class="empty-state" style="color:red;">Failed to load dashboard data.<br>Please check server logs.</div>`;
+                    `<p style="color:red; text-align:center;">Failed to load dashboard data.<br>Please check server logs.</p>`;
             }
         }
 
         loadDashboard();
-        setInterval(loadDashboard, 30000); // Auto refresh every 30 seconds
+        setInterval(loadDashboard, 30000); // Auto-refresh every 30 seconds
     </script>
 </body>
 </html>
