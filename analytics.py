@@ -114,7 +114,7 @@ async def analytics_page(request: Request):
         with open("static/analytics.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
     except FileNotFoundError:
-        return HTMLResponse("<h1>Error: analytics.html not found in static folder</h1><p>Make sure the file exists and was deployed.</p>", status_code=500)
+        return HTMLResponse("<h1>Error: analytics.html not found</h1>", status_code=500)
     except Exception as e:
         logger.error(f"Analytics page error: {e}")
         return HTMLResponse("<h1>Error loading analytics page</h1>", status_code=500)
