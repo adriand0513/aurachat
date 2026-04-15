@@ -46,15 +46,28 @@
         async function loadData() {
             try {
                 const res = await fetch(`/analytics?pw=${pw}`);
-                const text = await res.text();
-                document.getElementById('content').innerHTML = `<pre>${text}</pre>`;
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                document.getElementById('content').innerHTML = `
+                    <pre style="background:#1f1b2e; padding:20px; border-radius:12px; text-align:left; overflow:auto;">
+    ${JSON.stringify(data, null, 2)}
+                    </pre>
+                `;
             } catch (err) {
-                document.getElementById('content').innerHTML = `<p class="error">Failed to load data.<br>${err.message}</p>`;
+                document.getElementById('content').innerHTML = `
+                    <p style="color:#ff3366; text-align:center;">
+                        Failed to load data.<br>
+                        ${err.message}<br>
+                        Please check server logs.
+                    </p>
+                `;
             }
         }
 
         loadData();
-        setInterval(loadData, 15000); // Refresh every 15 seconds
+        setInterval(loadData, 15000); // refresh every 15 seconds
     </script>
 </body>
 </html>
