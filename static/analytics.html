@@ -118,20 +118,7 @@
         </header>
 
         <!-- Summary Stats -->
-        <div class="stats-grid" id="summary-stats">
-            <div class="stat-card">
-                <h3>Total Conversations</h3>
-                <p class="stat-value">0</p>
-            </div>
-            <div class="stat-card">
-                <h3>Total Messages</h3>
-                <p class="stat-value">0</p>
-            </div>
-            <div class="stat-card">
-                <h3>Active Today</h3>
-                <p class="stat-value">0</p>
-            </div>
-        </div>
+        <div class="stats-grid" id="summary-stats"></div>
 
         <!-- Charts -->
         <div class="chart-row">
@@ -162,14 +149,12 @@
         async function loadDashboard() {
             try {
                 const res = await fetch(`/analytics?pw=${pw}`);
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}`);
-                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
                 const data = await res.json();
                 const s = data.summary || {};
 
-                // Update Summary Cards
+                // Summary Cards
                 document.getElementById('summary-stats').innerHTML = `
                     <div class="stat-card">
                         <h3>Total Conversations</h3>
@@ -220,7 +205,6 @@
             }
         }
 
-        // Load immediately and refresh every 20 seconds
         loadDashboard();
         setInterval(loadDashboard, 20000);
     </script>
