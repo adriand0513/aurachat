@@ -195,8 +195,53 @@ def get_nyc_context() -> Dict[str, str]:
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
+
+    # Split on double newlines first (model sometimes uses them for natural breaks)
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    return paragraphs if paragraphs else [text.strip()]
+
+    # If the model didn't use double newlines, try to create natural breaks
+    if len(paragraphs) <= 1:
+        # Split on sentences, but keep some longer ones together
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        paragraphs = []
+        current = ""
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            # Occasionally start a new bubble (30-40% chance) to create 2-3 bubbles
+            if current and random.random() < 0.35 and len(paragraphs) < 3:
+                paragraphs.append(current.strip())
+                current = sentence
+            else:
+                if current:
+                    current += " " + sentence
+                else:
+                    current = sentence
+
+        if current:
+            paragraphs.append(current.strip())
+
+    # Fallback: if still only one bubble and it's long, force split
+    if len(paragraphs) == 1 and len(paragraphs[0]) > 180:
+        sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
+        paragraphs = []
+        current = ""
+        for sentence in sentences:
+            if len(current) + len(sentence) > 110 and current:
+                paragraphs.append(current.strip())
+                current = sentence
+            else:
+                current += " " + sentence if current else sentence
+        if current:
+            paragraphs.append(current.strip())
+
+    # Final cleanup
+    paragraphs = [p.strip() for p in paragraphs if p.strip()]
+
+    return paragraphs if paragraphs else [text.strip()]]
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 @app.get("/")
