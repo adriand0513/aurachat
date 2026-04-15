@@ -5,6 +5,7 @@ import json
 import random
 import time
 import logging
+import csv
 import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -45,20 +46,54 @@ app = FastAPI(title="Isabella Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(analytics_router)
 
-# ── SQLite Analytics Database ───────────────────────────────────────────────
+# ── Private CSV Logging (ONLY FOR YOUR USE) ─────────────────────────────────
+CSV_LOG_FILE = "isabella_private_logs.csv"
+
+def init_csv_log():
+    if not os.path.exists(CSV_LOG_FILE):
+        with open(CSV_LOG_FILE, mode='w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "timestamp", 
+                "convo_id", 
+                "user_message", 
+                "isabella_reply", 
+                "emotion", 
+                "voice_note_generated"
+            ])
+        logger.info("Created private CSV log file for personal analytics")
+
+init_csv_log()
+
+def log_to_csv(convo_id: str, user_message: str, isabella_reply: str, emotion: str, voice_note: bool):
+    try:
+        with open(CSV_LOG_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                convo_id,
+                user_message[:500],
+                isabella_reply[:1000],
+                emotion,
+                "Yes" if voice_note else "No"
+            ])
+    except Exception as e:
+        logger.error(f"Failed to write to private CSV log: {e}")
+
+# ── SQLite Analytics Database (kept as-is) ─────────────────────────────────
 DB_PATH = "analytics.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
+   
     c.execute('''CREATE TABLE IF NOT EXISTS conversations (
                     convo_id TEXT PRIMARY KEY,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     message_count INTEGER DEFAULT 0
                 )''')
-    
+   
     c.execute('''CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     convo_id TEXT,
@@ -67,14 +102,13 @@ def init_db():
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     emotion TEXT DEFAULT 'neutral'
                 )''')
-    
-    # Migration for emotion column
+   
     try:
         c.execute("ALTER TABLE messages ADD COLUMN emotion TEXT DEFAULT 'neutral'")
         logger.info("Added 'emotion' column to messages table")
     except sqlite3.OperationalError:
         pass
-    
+   
     conn.commit()
     conn.close()
     logger.info("Analytics database initialized successfully")
@@ -112,9 +146,9 @@ def log_message(convo_id: str, role: str, content: str):
     emotion = detect_emotion(content) if role == "assistant" else "neutral"
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT INTO messages (convo_id, role, content, emotion) VALUES (?, ?, ?, ?)", 
+    c.execute("INSERT INTO messages (convo_id, role, content, emotion) VALUES (?, ?, ?, ?)",
               (convo_id, role, content, emotion))
-    c.execute("UPDATE conversations SET last_active = CURRENT_TIMESTAMP, message_count = message_count + 1 WHERE convo_id = ?", 
+    c.execute("UPDATE conversations SET last_active = CURRENT_TIMESTAMP, message_count = message_count + 1 WHERE convo_id = ?",
               (convo_id,))
     conn.commit()
     conn.close()
@@ -129,9 +163,9 @@ def save_message(convo_id: str, message: Dict):
     if convo_id not in conversations:
         conversations[convo_id] = []
         log_conversation_start(convo_id)
-    
+   
     conversations[convo_id].append(message)
-    log_message(convo_id, message["role"], message["content"])   # ← This was missing
+    log_message(convo_id, message["role"], message["content"])
 
 # ── Rate limiting ───────────────────────────────────────────────────────────
 convo_rate_limits = defaultdict(list)
@@ -257,8 +291,26 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
             logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
             voice_note = ""
 
+    # Save messages + Private CSV logging (only for you)
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
+
+    # Private CSV log - ONLY for your personal use
+    if bubbles:
+        last_user_message = ""
+        if get_history(convo_id):
+            for msg in reversed(get_history(convo_id)):
+                if msg["role"] == "user":
+                    last_user_message = msg["content"]
+                    break
+        
+        log_to_csv(
+            convo_id=convo_id,
+            user_message=last_user_message,
+            isabella_reply=" | ".join(bubbles),
+            emotion=detect_emotion(" ".join(bubbles)),
+            voice_note=bool(voice_note)
+        )
 
     return {"replies": bubbles, "voice_note": voice_note}
 
