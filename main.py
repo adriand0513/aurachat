@@ -54,11 +54,11 @@ def init_csv_log():
         with open(CSV_LOG_FILE, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
-                "timestamp", 
-                "convo_id", 
-                "user_message", 
-                "isabella_reply", 
-                "emotion", 
+                "timestamp",
+                "convo_id",
+                "user_message",
+                "isabella_reply",
+                "emotion",
                 "voice_note_generated"
             ])
         logger.info("Created private CSV log file for personal analytics")
@@ -86,14 +86,14 @@ DB_PATH = "analytics.db"
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-   
+  
     c.execute('''CREATE TABLE IF NOT EXISTS conversations (
                     convo_id TEXT PRIMARY KEY,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     message_count INTEGER DEFAULT 0
                 )''')
-   
+  
     c.execute('''CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     convo_id TEXT,
@@ -102,13 +102,13 @@ def init_db():
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     emotion TEXT DEFAULT 'neutral'
                 )''')
-   
+  
     try:
         c.execute("ALTER TABLE messages ADD COLUMN emotion TEXT DEFAULT 'neutral'")
         logger.info("Added 'emotion' column to messages table")
     except sqlite3.OperationalError:
         pass
-   
+  
     conn.commit()
     conn.close()
     logger.info("Analytics database initialized successfully")
@@ -163,7 +163,7 @@ def save_message(convo_id: str, message: Dict):
     if convo_id not in conversations:
         conversations[convo_id] = []
         log_conversation_start(convo_id)
-   
+  
     conversations[convo_id].append(message)
     log_message(convo_id, message["role"], message["content"])
 
@@ -192,6 +192,7 @@ def get_nyc_context() -> Dict[str, str]:
         weather = "chilly evening"
     return {"time": time_str, "weather": weather}
 
+# ── Improved split_into_bubbles ─────────────────────────────────────────────
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
@@ -201,16 +202,13 @@ def split_into_bubbles(text: str) -> List[str]:
 
     # If the model didn't use double newlines, try to create natural breaks
     if len(paragraphs) <= 1:
-        # Split on sentences, but keep some longer ones together
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         paragraphs = []
         current = ""
-
         for sentence in sentences:
             sentence = sentence.strip()
             if not sentence:
                 continue
-
             # Occasionally start a new bubble (30-40% chance) to create 2-3 bubbles
             if current and random.random() < 0.35 and len(paragraphs) < 3:
                 paragraphs.append(current.strip())
@@ -220,7 +218,6 @@ def split_into_bubbles(text: str) -> List[str]:
                     current += " " + sentence
                 else:
                     current = sentence
-
         if current:
             paragraphs.append(current.strip())
 
@@ -241,7 +238,7 @@ def split_into_bubbles(text: str) -> List[str]:
     # Final cleanup
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
 
-    return paragraphs if paragraphs else [text.strip()]]
+    return paragraphs if paragraphs else [text.strip()]
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 @app.get("/")
@@ -348,7 +345,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
                 if msg["role"] == "user":
                     last_user_message = msg["content"]
                     break
-        
+       
         log_to_csv(
             convo_id=convo_id,
             user_message=last_user_message,
