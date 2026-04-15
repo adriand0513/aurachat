@@ -3,71 +3,226 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>AuraChat Dashboard</title>
+    <title>AuraChat • Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {
+            --bg: #0d0015;
+            --accent-purple: #c300ff;
+            --accent-pink: #ff0099;
+            --text: #f8f0ff;
+            --text-muted: #bb99cc;
+            --card: rgba(35, 25, 60, 0.96);
+            --glow: rgba(195, 0, 255, 0.25);
+        }
         body {
-            background: #0d0015;
-            color: #f8f0ff;
-            font-family: system-ui, sans-serif;
-            padding: 40px;
-            line-height: 1.6;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 30px 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 60px;
         }
         h1 {
-            color: #ff0099;
-            text-align: center;
+            font-size: 3.2rem;
+            margin: 0 0 12px 0;
+            background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
         }
-        pre {
-            background: rgba(35,25,60,0.9);
-            padding: 30px;
-            border-radius: 16px;
-            overflow: auto;
-            max-width: 900px;
-            margin: 30px auto;
-            white-space: pre-wrap;
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.3rem;
         }
-        .error {
-            color: #ff3366;
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 28px;
+            margin-bottom: 60px;
+        }
+        .stat-card {
+            background: var(--card);
+            padding: 36px 28px;
+            border-radius: 24px;
             text-align: center;
-            font-size: 1.2rem;
+            box-shadow: 0 10px 35px var(--glow);
+        }
+        .stat-card h3 {
+            margin: 0 0 18px 0;
+            color: var(--text-muted);
+            font-size: 15px;
+            font-weight: 500;
+        }
+        .stat-value {
+            font-size: 52px;
+            font-weight: 700;
+            color: var(--accent-purple);
+            margin: 0;
+        }
+        .chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            margin-bottom: 60px;
+        }
+        .chart-container {
+            background: var(--card);
+            padding: 32px;
+            border-radius: 24px;
+            box-shadow: 0 10px 35px var(--glow);
+            min-height: 400px;
+        }
+        .chart-title {
+            font-size: 1.55rem;
+            color: var(--accent-pink);
+            margin-bottom: 24px;
+            font-weight: 600;
+        }
+        canvas {
+            max-height: 380px;
+        }
+        .emotions-section {
+            background: var(--card);
+            padding: 32px;
+            border-radius: 24px;
+            box-shadow: 0 10px 35px var(--glow);
+        }
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 80px 20px;
+            font-size: 1.15rem;
+        }
+        .last-updated {
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 50px;
+            font-size: 1rem;
         }
     </style>
 </head>
 <body>
-    <h1>AuraChat Dashboard</h1>
-    <p style="text-align:center; color:#bb99cc;">Isabella • Live Insights</p>
-    
-    <div id="content">
-        <p style="text-align:center;">Loading data...</p>
+    <div class="container">
+        <header>
+            <h1>AuraChat Dashboard</h1>
+            <p class="subtitle">Isabella • Live Conversation Insights</p>
+        </header>
+
+        <!-- Summary Stats -->
+        <div class="stats-grid" id="summary-stats">
+            <div class="stat-card">
+                <h3>Total Conversations</h3>
+                <p class="stat-value">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Total Messages</h3>
+                <p class="stat-value">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Active Today</h3>
+                <p class="stat-value">0</p>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-row">
+            <div class="chart-container">
+                <div class="chart-title">Hourly Activity</div>
+                <div id="hourly-placeholder" class="empty-state">No activity data yet</div>
+                <canvas id="hourlyChart" style="display:none;"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Daily Activity (Last 14 Days)</div>
+                <div id="daily-placeholder" class="empty-state">No daily data yet</div>
+                <canvas id="dailyChart" style="display:none;"></canvas>
+            </div>
+        </div>
+
+        <!-- Top Emotions -->
+        <div class="emotions-section">
+            <div class="chart-title">Top Emotions Isabella Sends</div>
+            <div id="top-emotions" class="empty-state">No emotion data yet.<br>Start chatting with Isabella.</div>
+        </div>
+
+        <div class="last-updated" id="last-updated">Last updated just now</div>
     </div>
 
     <script>
         const pw = new URLSearchParams(window.location.search).get('pw') || '';
 
-        async function loadData() {
+        async function loadDashboard() {
             try {
                 const res = await fetch(`/analytics?pw=${pw}`);
                 if (!res.ok) {
                     throw new Error(`HTTP ${res.status}`);
                 }
+
                 const data = await res.json();
-                document.getElementById('content').innerHTML = `
-                    <pre style="background:#1f1b2e; padding:20px; border-radius:12px; text-align:left; overflow:auto;">
-    ${JSON.stringify(data, null, 2)}
-                    </pre>
+                const s = data.summary || {};
+
+                // Update Summary Cards
+                document.getElementById('summary-stats').innerHTML = `
+                    <div class="stat-card">
+                        <h3>Total Conversations</h3>
+                        <p class="stat-value">${s.total_conversations || 0}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Messages</h3>
+                        <p class="stat-value">${s.total_messages || 0}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Active Today</h3>
+                        <p class="stat-value">${s.active_today || 0}</p>
+                    </div>
                 `;
+
+                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+
+                // Top Emotions
+                const emotionsDiv = document.getElementById('top-emotions');
+                const topEmotions = data.top_emotions || {};
+                let html = '';
+                if (Object.keys(topEmotions).length === 0) {
+                    html = `<div class="empty-state">No emotion data yet.<br>Start chatting with Isabella to see insights.</div>`;
+                } else {
+                    Object.entries(topEmotions).forEach(([emotion, count]) => {
+                        const perc = s.total_messages ? Math.round((count / s.total_messages) * 100) : 0;
+                        html += `
+                            <div style="display:flex; align-items:center; margin:20px 0;">
+                                <div style="width:180px; font-weight:600; color:#ff0099;">${emotion}</div>
+                                <div style="flex:1; height:16px; background:#1f1b2e; border-radius:999px; margin:0 20px; overflow:hidden;">
+                                    <div style="height:100%; background:linear-gradient(to right, #c300ff, #ff0099); width:${perc}%"></div>
+                                </div>
+                                <div style="width:70px; text-align:right; font-weight:600;">${count}</div>
+                            </div>
+                        `;
+                    });
+                }
+                emotionsDiv.innerHTML = html;
+
             } catch (err) {
-                document.getElementById('content').innerHTML = `
-                    <p style="color:#ff3366; text-align:center;">
+                console.error("Dashboard fetch error:", err);
+                document.getElementById('top-emotions').innerHTML = `
+                    <div class="empty-state" style="color:#ff3366;">
                         Failed to load data.<br>
-                        ${err.message}<br>
                         Please check server logs.
-                    </p>
+                    </div>
                 `;
             }
         }
 
-        loadData();
-        setInterval(loadData, 15000); // refresh every 15 seconds
+        // Load immediately and refresh every 20 seconds
+        loadDashboard();
+        setInterval(loadDashboard, 20000);
     </script>
 </body>
 </html>
