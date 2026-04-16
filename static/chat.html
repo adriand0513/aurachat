@@ -61,7 +61,7 @@
         #messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px 16px 120px;   /* Generous bottom padding */
+            padding: 20px 16px 120px;
             display: flex;
             flex-direction: column;
             gap: 14px;
@@ -289,15 +289,10 @@
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-        
+       
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
-        
-        let userIdleTimeout = null;
-        let thinkingTimeout = null;
-
-        const USER_IDLE_PAUSE = 6000;
-
+       
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
@@ -324,96 +319,15 @@
             }
         }
 
-        function getThinkingDelay() {
-            let delay = 10000 + Math.random() * 15000;
-            const lastMessage = messagesHistory[messagesHistory.length - 1];
-            if (lastMessage && lastMessage.role === 'user') {
-                if (lastMessage.content.length > 60) delay += 4000;
-                if (/baby|sexy|beautiful|want|dream|love/i.test(lastMessage.content)) delay += 3000;
-            }
-            return Math.floor(delay);
+        function addMessage(text, type) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}`;
+            msgDiv.textContent = text;
+            messagesContainer.appendChild(msgDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        function getBubbleGap() {
-            return 3000 + Math.random() * 2500;
-        }
-
-        async function sendMessage() {
-            const msg = input.value.trim();
-            if (!msg) return;
-
-            addMessage(msg, 'sent');
-            messagesHistory.push({ role: 'user', content: msg });
-            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-            input.value = '';
-
-            if (userIdleTimeout) clearTimeout(userIdleTimeout);
-
-            userIdleTimeout = setTimeout(() => {
-                triggerBotReply();
-            }, USER_IDLE_PAUSE);
-
-            try {
-                await fetch('/api/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg, convo_id: convoId })
-                });
-            } catch (err) {
-                console.error('Send error:', err);
-            } finally {
-                input.focus();
-            }
-        }
-
-        async function triggerBotReply() {
-            if (thinkingTimeout) clearTimeout(thinkingTimeout);
-        
-            const thinkingDelay = getThinkingDelay();
-        
-            thinkingTimeout = setTimeout(async () => {
-                typingIndicator.classList.add('visible');
-        
-                try {
-                    const res = await fetch('/api/reply', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ convo_id: convoId })
-                    });
-                    const data = await res.json();
-        
-                    // NEW: Immediately hide if nothing came back (XAI failure or empty)
-                    if (!data.replies || data.replies.length === 0) {
-                        typingIndicator.classList.remove('visible');
-                        return;
-                    }
-        
-                    for (let i = 0; i < data.replies.length; i++) {
-                        const bubble = data.replies[i];
-                        const isLast = i === data.replies.length - 1;
-                        const delay = i === 0 ? 0 : getBubbleGap();
-        
-                        await new Promise(resolve => {
-                            setTimeout(() => {
-                                if (isLast && data.voice_note) {
-                                    addVoiceNote(data.voice_note);
-                                } else {
-                                    addMessage(bubble, 'received');
-                                }
-                                messagesHistory.push({ role: 'assistant', content: bubble });
-                                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-                                resolve();
-                            }, delay);
-                        });
-                    }
-                } catch (err) {
-                    console.error(err);
-                } finally {
-                    typingIndicator.classList.remove('visible');
-                }
-            }, thinkingDelay);
-        }
-
+        // Voice Note function (kept from your previous version)
         function addVoiceNote(audioUrl) {
             const voiceDiv = document.createElement('div');
             voiceDiv.className = 'voice-note message received';
@@ -431,22 +345,18 @@
                 </div>
                 <div class="voice-duration">0:00</div>
             `;
-
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
-
             let isPlaying = false;
 
             audio.addEventListener('timeupdate', () => {
                 durationEl.textContent = formatTime(audio.currentTime);
             });
-
             audio.addEventListener('ended', () => {
                 isPlaying = false;
                 playBtn.textContent = '▶';
             });
-
             playBtn.addEventListener('click', () => {
                 if (isPlaying) {
                     audio.pause();
@@ -457,7 +367,6 @@
                 }
                 isPlaying = !isPlaying;
             });
-
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
@@ -468,14 +377,6 @@
             return `${min}:${sec.toString().padStart(2, '0')}`;
         }
 
-        function addMessage(text, type) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-            msgDiv.textContent = text;
-            messagesContainer.appendChild(msgDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
         // Event listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -483,7 +384,6 @@
                 sendMessage();
             }
         });
-
         sendBtn.addEventListener('click', sendMessage);
 
         function openFullAvatar() {
@@ -503,17 +403,20 @@
             if (event.target === modal) closeFullAvatar();
         };
 
-        // Strong mobile keyboard fix
+        // Strong mobile keyboard & visibility fix
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 150);
+            }, 250);
         }
 
         window.addEventListener('resize', handleKeyboard);
         window.addEventListener('orientationchange', handleKeyboard);
         input.addEventListener('focus', handleKeyboard);
         input.addEventListener('blur', handleKeyboard);
+
+        // Auto-focus on load
+        window.addEventListener('load', () => input.focus());
     </script>
 </body>
 </html>
