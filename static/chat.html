@@ -123,6 +123,9 @@
             font-size: 22px;
             cursor: pointer;
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .typing-indicator {
             display: flex;
@@ -327,7 +330,6 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        // Voice Note function (kept from your previous version)
         function addVoiceNote(audioUrl) {
             const voiceDiv = document.createElement('div');
             voiceDiv.className = 'voice-note message received';
@@ -377,14 +379,42 @@
             return `${min}:${sec.toString().padStart(2, '0')}`;
         }
 
-        // Event listeners
+        async function sendMessage() {
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            addMessage(msg, 'sent');
+            messagesHistory.push({ role: 'user', content: msg });
+            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+            input.value = '';
+
+            try {
+                await fetch('/api/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg, convo_id: convoId })
+                });
+            } catch (err) {
+                console.error('Send error:', err);
+            }
+
+            input.focus();
+        }
+
+        // Event listeners - Improved for mobile touch
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
         });
+
+        // Make sure send button works reliably on mobile
         sendBtn.addEventListener('click', sendMessage);
+        sendBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            sendMessage();
+        });
 
         function openFullAvatar() {
             const modal = document.getElementById('avatar-modal');
@@ -403,11 +433,11 @@
             if (event.target === modal) closeFullAvatar();
         };
 
-        // Strong mobile keyboard & visibility fix
+        // Mobile keyboard fix
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 250);
+            }, 300);
         }
 
         window.addEventListener('resize', handleKeyboard);
