@@ -307,7 +307,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     }
 
     try:
-        resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=35)
+        resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=90)
         resp.raise_for_status()
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
