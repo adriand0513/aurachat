@@ -295,7 +295,10 @@
        
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
-       
+        let userIdleTimeout = null;
+
+        const USER_IDLE_PAUSE = 6000;   // Keep your 6-second delay
+
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
@@ -388,20 +391,58 @@
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
 
-            try {
-                await fetch('/api/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg, convo_id: convoId })
-                });
-            } catch (err) {
-                console.error('Send error:', err);
-            }
+            // Clear any existing timeout and start fresh 6-second delay
+            if (userIdleTimeout) clearTimeout(userIdleTimeout);
+            userIdleTimeout = setTimeout(() => {
+                triggerBotReply();
+            }, USER_IDLE_PAUSE);
 
             input.focus();
         }
 
-        // Event listeners - Improved for mobile touch
+        async function triggerBotReply() {
+            typingIndicator.classList.add('visible');
+
+            try {
+                const res = await fetch('/api/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ convo_id: convoId })
+                });
+
+                const data = await res.json();
+
+                if (!data.replies || data.replies.length === 0) {
+                    typingIndicator.classList.remove('visible');
+                    return;
+                }
+
+                for (let i = 0; i < data.replies.length; i++) {
+                    const bubble = data.replies[i];
+                    const isLast = i === data.replies.length - 1;
+                    const delay = i === 0 ? 0 : 2800;
+
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            if (isLast && data.voice_note) {
+                                addVoiceNote(data.voice_note);
+                            } else {
+                                addMessage(bubble, 'received');
+                            }
+                            messagesHistory.push({ role: 'assistant', content: bubble });
+                            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+                            resolve();
+                        }, delay);
+                    });
+                }
+            } catch (err) {
+                console.error('Reply error:', err);
+            } finally {
+                typingIndicator.classList.remove('visible');
+            }
+        }
+
+        // Event listeners - Fixed for mobile
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -409,10 +450,9 @@
             }
         });
 
-        // Make sure send button works reliably on mobile
         sendBtn.addEventListener('click', sendMessage);
         sendBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
+            e.preventDefault();   // Important for mobile
             sendMessage();
         });
 
@@ -445,7 +485,6 @@
         input.addEventListener('focus', handleKeyboard);
         input.addEventListener('blur', handleKeyboard);
 
-        // Auto-focus on load
         window.addEventListener('load', () => input.focus());
     </script>
 </body>
