@@ -30,11 +30,11 @@ def clean_reply(text: str) -> str:
 
     # ── Gentle question mark fix ───────────────────────────────────────────
     # Only fix if it looks like a clear question but ends with period
-    if re.search(r'(?i)\b(what|how|why|when|where|who|do you|are you|can you|would you|tell me|is it|should i)\b', text.lower()) \
-       and text.endswith('.') and not text.endswith('?'):
-        # Avoid fixing titles or names (Mr., Dr., etc.)
-        if not any(x in text[-30:].lower() for x in ['mr.', 'mrs.', 'dr.', 'ms.', 'prof.']):
-            text = text[:-1] + '?'
+    # if re.search(r'(?i)\b(what|how|why|when|where|who|do you|are you|can you|would you|tell me|is it|should i)\b', text.lower()) \
+    #    and text.endswith('.') and not text.endswith('?'):
+    #     # Avoid fixing titles or names (Mr., Dr., etc.)
+    #     if not any(x in text[-30:].lower() for x in ['mr.', 'mrs.', 'dr.', 'ms.', 'prof.']):
+    #         text = text[:-1] + '?'
 
     # Final cleanup
     text = re.sub(r'\s*\.\s*', '. ', text)
