@@ -195,40 +195,64 @@ def get_nyc_context() -> Dict[str, str]:
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
+
+    # Clean up excessive whitespace first
+    text = re.sub(r'\s{2,}', ' ', text.strip())
+
+    # Split on double newlines first (if the model naturally uses them)
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+
+    # If no natural paragraphs, intelligently split into 2-3 bubbles
     if len(paragraphs) <= 1:
-        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        paragraphs = []
+        current = ""
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            # Build current bubble
+            if current:
+                current += " " + sentence
+            else:
+                current = sentence
+
+            # Decide when to split into a new bubble (more often than before)
+            # Increase chance of multiple bubbles as conversation progresses
+            split_chance = 0.55  # Higher than your original 0.35 → more bubbles
+
+            if len(paragraphs) < 4 and len(current) > 60 and random.random() < split_chance:
+                paragraphs.append(current.strip())
+                current = ""
+
+        if current:
+            paragraphs.append(current.strip())
+
+    # Final fallback: force split very long single bubbles
+    if len(paragraphs) == 1 and len(paragraphs[0]) > 160:
+        sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
         paragraphs = []
         current = ""
         for sentence in sentences:
             sentence = sentence.strip()
             if not sentence:
                 continue
-            if current and random.random() < 0.35 and len(paragraphs) < 3:
-                paragraphs.append(current.strip())
-                current = sentence
-            else:
-                if current:
-                    current += " " + sentence
-                else:
-                    current = sentence
-        if current:
-            paragraphs.append(current.strip())
-    if len(paragraphs) == 1 and len(paragraphs[0]) > 180:
-        sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
-        paragraphs = []
-        current = ""
-        for sentence in sentences:
-            if len(current) + len(sentence) > 110 and current:
+            if len(current) > 90 and len(paragraphs) < 3:
                 paragraphs.append(current.strip())
                 current = sentence
             else:
                 current += " " + sentence if current else sentence
         if current:
             paragraphs.append(current.strip())
-    paragraphs = [p.strip() for p in paragraphs if p.strip()]
-    return paragraphs if paragraphs else [text.strip()]
 
+    # Final cleanup
+    paragraphs = [p.strip() for p in paragraphs if p.strip()]
+
+    # Ensure we don't return empty list
+    return paragraphs if paragraphs else [text.strip()]
+    
 # ── Routes ──────────────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
