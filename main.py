@@ -85,14 +85,14 @@ DB_PATH = "analytics.db"
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-  
+ 
     c.execute('''CREATE TABLE IF NOT EXISTS conversations (
                     convo_id TEXT PRIMARY KEY,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     message_count INTEGER DEFAULT 0
                 )''')
-  
+ 
     c.execute('''CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     convo_id TEXT,
@@ -101,13 +101,13 @@ def init_db():
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     emotion TEXT DEFAULT 'neutral'
                 )''')
-  
+ 
     try:
         c.execute("ALTER TABLE messages ADD COLUMN emotion TEXT DEFAULT 'neutral'")
         logger.info("Added 'emotion' column to messages table")
     except sqlite3.OperationalError:
         pass
-  
+ 
     conn.commit()
     conn.close()
     logger.info("Analytics database initialized successfully")
@@ -162,7 +162,7 @@ def save_message(convo_id: str, message: Dict):
     if convo_id not in conversations:
         conversations[convo_id] = []
         log_conversation_start(convo_id)
-  
+ 
     conversations[convo_id].append(message)
     log_message(convo_id, message["role"], message["content"])
 
@@ -195,9 +195,7 @@ def get_nyc_context() -> Dict[str, str]:
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
-
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-
     if len(paragraphs) <= 1:
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         paragraphs = []
@@ -216,7 +214,6 @@ def split_into_bubbles(text: str) -> List[str]:
                     current = sentence
         if current:
             paragraphs.append(current.strip())
-
     if len(paragraphs) == 1 and len(paragraphs[0]) > 180:
         sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
         paragraphs = []
@@ -229,7 +226,6 @@ def split_into_bubbles(text: str) -> List[str]:
                 current += " " + sentence if current else sentence
         if current:
             paragraphs.append(current.strip())
-
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
     return paragraphs if paragraphs else [text.strip()]
 
@@ -286,8 +282,8 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         weather=context["weather"]
     )
 
-    # Send more recent messages to improve mobile consistency
-    recent_history = history[-25:]
+    # Improved for mobile: send more recent messages to reduce descriptive fallbacks
+    recent_history = history[-28:]
 
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
@@ -341,7 +337,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
                 if msg["role"] == "user":
                     last_user_message = msg["content"]
                     break
-       
+      
         log_to_csv(
             convo_id=convo_id,
             user_message=last_user_message,
