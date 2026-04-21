@@ -477,6 +477,7 @@
             }
         }
 
+        // Event listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -510,7 +511,7 @@
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 300);
+            }, 100);
         }
 
         window.addEventListener('resize', handleKeyboard);
