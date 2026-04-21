@@ -292,26 +292,68 @@
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-       
+
         let convoId = localStorage.getItem('convo_id');
-        let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
+        let messagesHistory = [];
         let userIdleTimeout = null;
+        const USER_IDLE_PAUSE = 8000; // Increased for better mobile reliability
 
-        const USER_IDLE_PAUSE = 6000;   // Keep your 6-second delay
-
+        // Initialize convoId
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
         }
 
-        window.addEventListener('load', () => {
+        // Defensive load from localStorage
+        function loadHistory() {
+            try {
+                const saved = localStorage.getItem('messages_history');
+                messagesHistory = saved ? JSON.parse(saved) : [];
+            } catch (e) {
+                console.warn('Failed to load history, starting fresh');
+                messagesHistory = [];
+                localStorage.removeItem('messages_history');
+            }
+        }
+
+        // Defensive save to localStorage
+        function saveHistory() {
+            try {
+                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+            } catch (e) {
+                console.error('Failed to save history:', e);
+            }
+        }
+
+        // Initialize chat (used on load and when tab becomes visible)
+        function initChat() {
+            loadHistory();
             messagesContainer.innerHTML = '';
             messagesHistory.forEach(msg => {
                 const type = msg.role === 'user' ? 'sent' : 'received';
                 addMessage(msg.content, type);
             });
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Load on page load
+        window.addEventListener('load', () => {
+            initChat();
             input.focus();
+        });
+
+        // Save when tab is hidden, re-sync when visible (critical for mobile)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                saveHistory();
+            } else if (document.visibilityState === 'visible') {
+                initChat(); // Re-load history when returning to the tab
+            }
+        });
+
+        // Final save when page is about to be unloaded
+        window.addEventListener('pagehide', () => {
+            saveHistory();
         });
 
         function clearConversation() {
@@ -319,9 +361,9 @@
                 localStorage.removeItem('convo_id');
                 localStorage.removeItem('messages_history');
                 messagesHistory = [];
-                messagesContainer.innerHTML = '';
                 convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
                 localStorage.setItem('convo_id', convoId);
+                messagesContainer.innerHTML = '';
             }
         }
 
@@ -388,10 +430,10 @@
 
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
-            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+            saveHistory();                    // Immediate save
+
             input.value = '';
 
-            // Clear any existing timeout and start fresh 6-second delay
             if (userIdleTimeout) clearTimeout(userIdleTimeout);
             userIdleTimeout = setTimeout(() => {
                 triggerBotReply();
@@ -430,7 +472,7 @@
                                 addMessage(bubble, 'received');
                             }
                             messagesHistory.push({ role: 'assistant', content: bubble });
-                            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+                            saveHistory();   // Save after each bubble
                             resolve();
                         }, delay);
                     });
@@ -442,7 +484,7 @@
             }
         }
 
-        // Event listeners - Fixed for mobile
+        // Event listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -452,7 +494,7 @@
 
         sendBtn.addEventListener('click', sendMessage);
         sendBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();   // Important for mobile
+            e.preventDefault();
             sendMessage();
         });
 
@@ -473,7 +515,7 @@
             if (event.target === modal) closeFullAvatar();
         };
 
-        // Mobile keyboard fix
+        // Mobile keyboard scroll fix
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -484,8 +526,6 @@
         window.addEventListener('orientationchange', handleKeyboard);
         input.addEventListener('focus', handleKeyboard);
         input.addEventListener('blur', handleKeyboard);
-
-        window.addEventListener('load', () => input.focus());
     </script>
 </body>
 </html>
