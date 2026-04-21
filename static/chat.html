@@ -296,15 +296,13 @@
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = [];
         let userIdleTimeout = null;
-        const USER_IDLE_PAUSE = 8000; // Increased for better mobile reliability
+        const USER_IDLE_PAUSE = 8000;
 
-        // Initialize convoId
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
         }
 
-        // Defensive load from localStorage
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
@@ -316,7 +314,6 @@
             }
         }
 
-        // Defensive save to localStorage
         function saveHistory() {
             try {
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
@@ -325,7 +322,6 @@
             }
         }
 
-        // Initialize chat (used on load and when tab becomes visible)
         function initChat() {
             loadHistory();
             messagesContainer.innerHTML = '';
@@ -336,22 +332,19 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        // Load on page load
         window.addEventListener('load', () => {
             initChat();
             input.focus();
         });
 
-        // Save when tab is hidden, re-sync when visible (critical for mobile)
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
                 saveHistory();
             } else if (document.visibilityState === 'visible') {
-                initChat(); // Re-load history when returning to the tab
+                initChat();
             }
         });
 
-        // Final save when page is about to be unloaded
         window.addEventListener('pagehide', () => {
             saveHistory();
         });
@@ -430,7 +423,7 @@
 
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
-            saveHistory();                    // Immediate save
+            saveHistory();
 
             input.value = '';
 
@@ -472,7 +465,7 @@
                                 addMessage(bubble, 'received');
                             }
                             messagesHistory.push({ role: 'assistant', content: bubble });
-                            saveHistory();   // Save after each bubble
+                            saveHistory();
                             resolve();
                         }, delay);
                     });
@@ -484,7 +477,6 @@
             }
         }
 
-        // Event listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -515,7 +507,6 @@
             if (event.target === modal) closeFullAvatar();
         };
 
-        // Mobile keyboard scroll fix
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
