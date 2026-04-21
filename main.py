@@ -36,10 +36,9 @@ from voice import generate_voice_note
 from analytics import router as analytics_router
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
-logger.info(f" cwd: {os.getcwd()}")
-logger.info(f" xAI key: {'YES' if XAI_API_KEY else 'MISSING'}")
 logger.info(f" Model: {XAI_MODEL}")
-logger.info(f" ElevenLabs Voice: {ELEVENLABS_VOICE_ID or 'NOT SET'}")
+logger.info(f" Temperature: {XAI_TEMPERATURE}")
+logger.info(f" Max tokens: {XAI_MAX_TOKENS}")
 logger.info("---")
 
 app = FastAPI(title="Isabella Chatbot")
@@ -80,7 +79,7 @@ def log_to_csv(convo_id: str, user_message: str, isabella_reply: str, emotion: s
     except Exception as e:
         logger.error(f"Failed to write to private CSV log: {e}")
 
-# ── SQLite Analytics Database (kept as-is) ─────────────────────────────────
+# ── SQLite Analytics Database ───────────────────────────────────────────────
 DB_PATH = "analytics.db"
 
 def init_db():
@@ -167,10 +166,10 @@ def save_message(convo_id: str, message: Dict):
     conversations[convo_id].append(message)
     log_message(convo_id, message["role"], message["content"])
 
-# ── Rate limiting ───────────────────────────────────────────────────────────
+# ── Rate limiting (made slightly gentler for mobile) ───────────────────────
 convo_rate_limits = defaultdict(list)
 
-def is_rate_limited(convo_id: str, max_per_minute: int = 15) -> bool:
+def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
     now = time.time()
     convo_rate_limits[convo_id] = [t for t in convo_rate_limits[convo_id] if now - t < 60]
     convo_rate_limits[convo_id].append(now)
@@ -197,10 +196,8 @@ def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
 
-    # Split on double newlines first (model sometimes uses them for natural breaks)
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
 
-    # If the model didn't use double newlines, try to create natural breaks
     if len(paragraphs) <= 1:
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         paragraphs = []
@@ -209,7 +206,6 @@ def split_into_bubbles(text: str) -> List[str]:
             sentence = sentence.strip()
             if not sentence:
                 continue
-            # Occasionally start a new bubble (30-40% chance) to create 2-3 bubbles
             if current and random.random() < 0.35 and len(paragraphs) < 3:
                 paragraphs.append(current.strip())
                 current = sentence
@@ -221,7 +217,6 @@ def split_into_bubbles(text: str) -> List[str]:
         if current:
             paragraphs.append(current.strip())
 
-    # Fallback: if still only one bubble and it's long, force split
     if len(paragraphs) == 1 and len(paragraphs[0]) > 180:
         sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
         paragraphs = []
@@ -235,9 +230,7 @@ def split_into_bubbles(text: str) -> List[str]:
         if current:
             paragraphs.append(current.strip())
 
-    # Final cleanup
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
-
     return paragraphs if paragraphs else [text.strip()]
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -284,8 +277,8 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     logger.info(f"{log_prefix} Generating reply | NYC: {context['time']} | Weather: {context['weather']}")
 
     history = get_history(convo_id)
-    if len(history) > 30:
-        history = history[-30:]
+    if len(history) > 40:
+        history = history[-40:]
 
     system_prompt = get_system_prompt(
         user_name=None,
@@ -293,7 +286,10 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         weather=context["weather"]
     )
 
-    messages = [{"role": "system", "content": system_prompt}] + history[-20:]
+    # Send more recent messages to improve mobile consistency
+    recent_history = history[-25:]
+
+    messages = [{"role": "system", "content": system_prompt}] + recent_history
 
     headers = {
         "Authorization": f"Bearer {XAI_API_KEY}",
@@ -333,11 +329,11 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
             logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
             voice_note = ""
 
-    # Save messages + Private CSV logging (only for you)
+    # Save messages
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
-    # Private CSV log - ONLY for your personal use
+    # Private CSV log
     if bubbles:
         last_user_message = ""
         if get_history(convo_id):
