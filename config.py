@@ -14,8 +14,8 @@ ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 # ── xAI ─────────────────────────────────────────────────────────────────────
 XAI_API_KEY = os.getenv("XAI_API_KEY")
 XAI_API_BASE = os.getenv("XAI_API_BASE", "https://api.x.ai/v1/chat/completions")
-XAI_MODEL = os.getenv("XAI_MODEL", "grok-4")
-XAI_TEMPERATURE = float(os.getenv("XAI_TEMPERATURE", "0.82"))
+XAI_MODEL = os.getenv("XAI_MODEL", "grok-4.20")
+XAI_TEMPERATURE = float(os.getenv("XAI_TEMPERATURE", "0.84"))
 XAI_MAX_TOKENS = int(os.getenv("XAI_MAX_TOKENS", "1024"))
 
 # ── Auth / JWT / Email ──────────────────────────────────────────────────────
