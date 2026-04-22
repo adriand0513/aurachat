@@ -45,17 +45,17 @@ def clean_reply(text: str) -> str:
     for pattern in try_hard_patterns:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
 
-    # ── Light Dynamic Grok humanizing (much gentler now) ───────────────────
-    # Only trigger rarely and with very soft instructions
-    if len(text) > 100 and random.random() < 0.18:   # Lower chance (18%) and only on longer replies
+    # ── Very light Dynamic Grok humanizing (tuned down) ───────────────────
+    # Only trigger rarely and very gently
+    if len(text) > 120 and random.random() < 0.10:   # Only 10% chance on longer replies
         try:
-            humanize_prompt = f"""Make this reply sound more like casual texting from a real 25-year-old girl. 
-Keep the exact same meaning and flirt level. Just make it a bit more natural and less polished. 
-Do not add or remove any important content.
+            humanize_prompt = f"""This is a casual text from a 25-year-old girl. 
+Make it slightly more natural and conversational if it sounds too polished. 
+Change as little as possible. Keep the exact meaning and flirt level.
 
 Original: {text}
 
-Casual version:"""
+Slightly more natural version:"""
 
             headers = {
                 "Authorization": f"Bearer {XAI_API_KEY}",
@@ -64,17 +64,17 @@ Casual version:"""
             data = {
                 "model": XAI_MODEL,
                 "messages": [{"role": "user", "content": humanize_prompt}],
-                "temperature": 0.8,
-                "max_tokens": 250,
+                "temperature": 0.75,
+                "max_tokens": 200,
             }
 
-            resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=6)
+            resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=5)
             if resp.status_code == 200:
                 rewritten = resp.json()["choices"][0]["message"]["content"].strip()
-                if rewritten and 20 < len(rewritten) < len(text) * 1.3:   # Only use if it's reasonable
+                if rewritten and len(rewritten) > 30 and len(rewritten) < len(text) * 1.25:
                     text = rewritten
         except Exception as e:
-            logger.warning(f"Light humanize failed: {e}")
+            logger.warning(f"Light humanize skipped: {e}")
 
     # ── Light question reduction ───────────────────────────────────────────
     if random.random() < 0.60 and text.endswith('?'):
