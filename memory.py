@@ -1,18 +1,17 @@
 # memory.py - Long-term Memory & Relationship System for Isabella
 import sqlite3
 import os
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Optional
 
 DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
 
 def init_db():
-    """Initialize all memory-related tables with safe migration."""
+    """Initialize and safely migrate all memory tables."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Raw chat history
+    # Raw chat history with proper convo_id
     c.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,6 +21,15 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # Safe migration: add convo_id column if it doesn't exist
+    try:
+        c.execute("ALTER TABLE chat_history ADD COLUMN convo_id TEXT")
+        print("Migrated: Added convo_id column to chat_history")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Create index
     c.execute('CREATE INDEX IF NOT EXISTS idx_convo_id ON chat_history (convo_id)')
 
     # Key long-term facts
@@ -50,7 +58,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print(f"Memory system initialized successfully. DB: {DB_PATH}")
+    print(f"Memory system initialized and migrated successfully. DB: {DB_PATH}")
 
 # ── Basic History Functions ───────────────────────────────────────────────
 def get_history(convo_id: str, limit: int = 50) -> List[Dict]:
@@ -122,7 +130,6 @@ def get_pet_name(convo_id: str) -> str:
 def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
     current = get_relationship_level(convo_id)
     new_level = max(1, min(10, current + delta))
     
@@ -135,9 +142,8 @@ def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] =
             pet_name = COALESCE(?, pet_name),
             notes = COALESCE(notes || '\n' || ?, notes)
     ''', (convo_id, new_level, pet_name, note))
-    
     conn.commit()
     conn.close()
 
-# Initialize everything
+# Initialize
 init_db()
