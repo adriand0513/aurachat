@@ -45,17 +45,17 @@ def clean_reply(text: str) -> str:
     for pattern in try_hard_patterns:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
 
-    # ── Dynamic Grok secondary check (very light) ─────────────────────────
-    # Only trigger on longer or suspicious replies to keep it efficient
-    if len(text) > 90 or random.random() < 0.25:   # ~25% chance + long replies
+    # ── Light Dynamic Grok humanizing (much gentler now) ───────────────────
+    # Only trigger rarely and with very soft instructions
+    if len(text) > 100 and random.random() < 0.18:   # Lower chance (18%) and only on longer replies
         try:
-            humanize_prompt = f"""Rewrite this reply to sound like a real 25-year-old girl casually texting. 
-Make it natural, a bit messy, direct, and feminine. Remove any try-hard, poetic, or overly polished language. 
-Keep the exact meaning and flirt level the same.
+            humanize_prompt = f"""Make this reply sound more like casual texting from a real 25-year-old girl. 
+Keep the exact same meaning and flirt level. Just make it a bit more natural and less polished. 
+Do not add or remove any important content.
 
 Original: {text}
 
-Rewritten:"""
+Casual version:"""
 
             headers = {
                 "Authorization": f"Bearer {XAI_API_KEY}",
@@ -64,21 +64,21 @@ Rewritten:"""
             data = {
                 "model": XAI_MODEL,
                 "messages": [{"role": "user", "content": humanize_prompt}],
-                "temperature": 0.85,
-                "max_tokens": 300,
+                "temperature": 0.8,
+                "max_tokens": 250,
             }
 
-            resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=8)
+            resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=6)
             if resp.status_code == 200:
                 rewritten = resp.json()["choices"][0]["message"]["content"].strip()
-                if rewritten and len(rewritten) > 10:
+                if rewritten and 20 < len(rewritten) < len(text) * 1.3:   # Only use if it's reasonable
                     text = rewritten
         except Exception as e:
-            logger.warning(f"Secondary Grok humanize failed: {e}")
+            logger.warning(f"Light humanize failed: {e}")
 
-    # ── Smart question reduction ───────────────────────────────────────────
-    if random.random() < 0.65 and text.endswith('?'):
-        if random.random() < 0.55:
+    # ── Light question reduction ───────────────────────────────────────────
+    if random.random() < 0.60 and text.endswith('?'):
+        if random.random() < 0.5:
             text = text[:-1].strip() + '.'
         else:
             sentences = re.split(r'(?<=[.!?])\s+', text)
