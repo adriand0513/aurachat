@@ -35,6 +35,15 @@ from postprocess import clean_reply
 from voice import generate_voice_note
 from analytics import router as analytics_router
 
+# NEW: Import memory system
+from memory import (
+    get_history as get_memory_history,
+    save_message as save_memory_message,
+    get_relevant_facts,
+    get_relationship_level,
+    summarize_recent_chat
+)
+
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 logger.info(f" Model: {XAI_MODEL}")
 logger.info(f" Temperature: {XAI_TEMPERATURE}")
@@ -53,14 +62,9 @@ def init_csv_log():
         with open(CSV_LOG_FILE, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
-                "timestamp",
-                "convo_id",
-                "user_message",
-                "isabella_reply",
-                "emotion",
-                "voice_note_generated"
+                "timestamp", "convo_id", "user_message", "isabella_reply", "emotion", "voice_note_generated"
             ])
-        logger.info("Created private CSV log file for personal analytics")
+        logger.info("Created private CSV log file")
 
 init_csv_log()
 
@@ -85,14 +89,12 @@ DB_PATH = "analytics.db"
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
- 
     c.execute('''CREATE TABLE IF NOT EXISTS conversations (
                     convo_id TEXT PRIMARY KEY,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     message_count INTEGER DEFAULT 0
                 )''')
- 
     c.execute('''CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     convo_id TEXT,
@@ -101,20 +103,17 @@ def init_db():
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     emotion TEXT DEFAULT 'neutral'
                 )''')
- 
     try:
         c.execute("ALTER TABLE messages ADD COLUMN emotion TEXT DEFAULT 'neutral'")
-        logger.info("Added 'emotion' column to messages table")
     except sqlite3.OperationalError:
         pass
- 
     conn.commit()
     conn.close()
     logger.info("Analytics database initialized successfully")
 
 init_db()
 
-# Emotion detection
+# Emotion detection (unchanged)
 EMOTION_MAP = {
     "flirty": ["sexy", "horny", "kiss", "touch", "want you", "miss you"],
     "playful": ["lol", "haha", "tease", "funny"],
@@ -152,21 +151,14 @@ def log_message(convo_id: str, role: str, content: str):
     conn.commit()
     conn.close()
 
-# ── Anonymous Memory ────────────────────────────────────────────────────────
-conversations = {}
-
+# ── Anonymous Memory (now using memory.py) ─────────────────────────────────
 def get_history(convo_id: str) -> List[Dict]:
-    return conversations.get(convo_id, [])
+    return get_memory_history(convo_id)
 
 def save_message(convo_id: str, message: Dict):
-    if convo_id not in conversations:
-        conversations[convo_id] = []
-        log_conversation_start(convo_id)
- 
-    conversations[convo_id].append(message)
-    log_message(convo_id, message["role"], message["content"])
+    save_memory_message(convo_id, message)
 
-# ── Rate limiting (made slightly gentler for mobile) ───────────────────────
+# ── Rate limiting ───────────────────────────────────────────────────────────
 convo_rate_limits = defaultdict(list)
 
 def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
@@ -195,64 +187,40 @@ def get_nyc_context() -> Dict[str, str]:
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
-
-    # Clean up excessive whitespace first
-    text = re.sub(r'\s{2,}', ' ', text.strip())
-
-    # Split on double newlines first (if the model naturally uses them)
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-
-    # If no natural paragraphs, intelligently split into 2-3 bubbles
     if len(paragraphs) <= 1:
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         paragraphs = []
         current = ""
-
         for sentence in sentences:
             sentence = sentence.strip()
             if not sentence:
                 continue
-
-            # Build current bubble
-            if current:
-                current += " " + sentence
-            else:
-                current = sentence
-
-            # Decide when to split into a new bubble (more often than before)
-            # Increase chance of multiple bubbles as conversation progresses
-            split_chance = 0.55  # Higher than your original 0.35 → more bubbles
-
-            if len(paragraphs) < 4 and len(current) > 60 and random.random() < split_chance:
+            if current and random.random() < 0.45 and len(paragraphs) < 3:   # Increased chance
                 paragraphs.append(current.strip())
-                current = ""
-
+                current = sentence
+            else:
+                if current:
+                    current += " " + sentence
+                else:
+                    current = sentence
         if current:
             paragraphs.append(current.strip())
-
-    # Final fallback: force split very long single bubbles
     if len(paragraphs) == 1 and len(paragraphs[0]) > 160:
         sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
         paragraphs = []
         current = ""
         for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-            if len(current) > 90 and len(paragraphs) < 3:
+            if len(current) > 95 and len(paragraphs) < 3:
                 paragraphs.append(current.strip())
                 current = sentence
             else:
                 current += " " + sentence if current else sentence
         if current:
             paragraphs.append(current.strip())
-
-    # Final cleanup
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
-
-    # Ensure we don't return empty list
     return paragraphs if paragraphs else [text.strip()]
-    
+
 # ── Routes ──────────────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
@@ -270,7 +238,6 @@ async def chat_page():
     except FileNotFoundError:
         return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
-# ── Open Chat Endpoints ─────────────────────────────────────────────────────
 @app.post("/api/send")
 async def send_message(body: Dict[str, str] = Body(...)):
     convo_id = body.get("convo_id")
@@ -294,11 +261,19 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     log_prefix = f"Convo {convo_id}"
     context = get_nyc_context()
 
-    logger.info(f"{log_prefix} Generating reply | NYC: {context['time']} | Weather: {context['weather']}")
-
+    # Get raw history
     history = get_history(convo_id)
     if len(history) > 40:
         history = history[-40:]
+
+    # NEW: Get long-term memory and relationship state
+    relevant_facts = get_relevant_facts(convo_id, limit=6)
+    rel_level = get_relationship_level(convo_id)
+
+    # Build memory summary (short and useful)
+    memory_summary = ""
+    if relevant_facts:
+        memory_summary = "Important things you remember about him: " + " | ".join(relevant_facts[:5])
 
     system_prompt = get_system_prompt(
         user_name=None,
@@ -306,9 +281,12 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         weather=context["weather"]
     )
 
-    # Improved for mobile: send more recent messages to reduce descriptive fallbacks
-    recent_history = history[-28:]
+    # Inject memory summary into the system prompt (clean way)
+    if memory_summary:
+        system_prompt += f"\n\n{memory_summary}\nCurrent relationship closeness: Level {rel_level}/10"
 
+    # Send recent messages + memory context
+    recent_history = history[-28:]
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
     headers = {
@@ -328,8 +306,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            logger.error(f"{log_prefix} XAI response body: {e.response.text[:800]}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
     reply = clean_reply(raw_reply)
@@ -343,8 +319,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         try:
             last_bubble = bubbles[-1]
             voice_note = generate_voice_note(last_bubble)
-            if voice_note:
-                logger.info(f"{log_prefix} Voice note generated successfully")
         except Exception as e:
             logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
             voice_note = ""
@@ -352,6 +326,10 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     # Save messages
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
+
+    # Occasionally summarize recent chat for long-term memory
+    if len(history) % 12 == 0:   # Every ~12 messages
+        summarize_recent_chat(convo_id)
 
     # Private CSV log
     if bubbles:
@@ -361,7 +339,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
                 if msg["role"] == "user":
                     last_user_message = msg["content"]
                     break
-      
+       
         log_to_csv(
             convo_id=convo_id,
             user_message=last_user_message,
