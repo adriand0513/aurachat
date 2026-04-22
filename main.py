@@ -261,31 +261,38 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     log_prefix = f"Convo {convo_id}"
     context = get_nyc_context()
 
+    logger.info(f"{log_prefix} Generating reply | NYC: {context['time']} | Weather: {context['weather']}")
+
     # Get raw history
     history = get_history(convo_id)
     if len(history) > 40:
         history = history[-40:]
 
-    # NEW: Get long-term memory and relationship state
+    # ── Long-term Memory & Relationship Integration ───────────────────────
     relevant_facts = get_relevant_facts(convo_id, limit=6)
     rel_level = get_relationship_level(convo_id)
+    pet_name = get_pet_name(convo_id)
 
-    # Build memory summary (short and useful)
+    # Build concise memory summary
     memory_summary = ""
     if relevant_facts:
-        memory_summary = "Important things you remember about him: " + " | ".join(relevant_facts[:5])
+        memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:5])
 
+    # Get base system prompt
     system_prompt = get_system_prompt(
         user_name=None,
         current_time=context["time"],
         weather=context["weather"]
     )
 
-    # Inject memory summary into the system prompt (clean way)
+    # Inject memory + relationship context (clean and short)
     if memory_summary:
-        system_prompt += f"\n\n{memory_summary}\nCurrent relationship closeness: Level {rel_level}/10"
+        system_prompt += f"\n\n{memory_summary}"
+    
+    system_prompt += f"\nCurrent relationship closeness with him: Level {rel_level}/10. "
+    system_prompt += f"Use pet name '{pet_name}' naturally when it feels right."
 
-    # Send recent messages + memory context
+    # Prepare messages for Grok
     recent_history = history[-28:]
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
@@ -306,6 +313,8 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
+        if hasattr(e, 'response') and e.response is not None:
+            logger.error(f"{log_prefix} XAI response body: {e.response.text[:800]}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
     reply = clean_reply(raw_reply)
@@ -319,6 +328,8 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         try:
             last_bubble = bubbles[-1]
             voice_note = generate_voice_note(last_bubble)
+            if voice_note:
+                logger.info(f"{log_prefix} Voice note generated successfully")
         except Exception as e:
             logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
             voice_note = ""
@@ -327,8 +338,8 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
-    # Occasionally summarize recent chat for long-term memory
-    if len(history) % 12 == 0:   # Every ~12 messages
+    # Occasionally summarize for long-term memory (every ~12 messages)
+    if len(history) % 12 == 0 and len(history) > 10:
         summarize_recent_chat(convo_id)
 
     # Private CSV log
@@ -349,7 +360,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         )
 
     return {"replies": bubbles, "voice_note": voice_note}
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
