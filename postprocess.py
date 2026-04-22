@@ -45,13 +45,13 @@ def clean_reply(text: str) -> str:
     for pattern in try_hard_patterns:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
 
-    # ── Very light Dynamic Grok humanizing (tuned down) ───────────────────
-    # Only trigger rarely and very gently
-    if len(text) > 120 and random.random() < 0.10:   # Only 10% chance on longer replies
+    # ── Very light Dynamic Grok humanizing (tuned down even more) ───────────
+    # Only trigger rarely and very minimally
+    if len(text) > 130 and random.random() < 0.08:   # Only 8% chance on longer replies
         try:
-            humanize_prompt = f"""This is a casual text from a 25-year-old girl. 
-Make it slightly more natural and conversational if it sounds too polished. 
-Change as little as possible. Keep the exact meaning and flirt level.
+            humanize_prompt = f"""This is a casual text message from a 25-year-old girl. 
+If it sounds a little too polished or AI-like, make it slightly more natural and conversational. 
+Change as little as possible — just smooth it out. Keep the exact meaning and flirt level.
 
 Original: {text}
 
@@ -65,13 +65,13 @@ Slightly more natural version:"""
                 "model": XAI_MODEL,
                 "messages": [{"role": "user", "content": humanize_prompt}],
                 "temperature": 0.75,
-                "max_tokens": 200,
+                "max_tokens": 180,
             }
 
             resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=5)
             if resp.status_code == 200:
                 rewritten = resp.json()["choices"][0]["message"]["content"].strip()
-                if rewritten and len(rewritten) > 30 and len(rewritten) < len(text) * 1.25:
+                if rewritten and 30 < len(rewritten) < len(text) * 1.2:
                     text = rewritten
         except Exception as e:
             logger.warning(f"Light humanize skipped: {e}")
