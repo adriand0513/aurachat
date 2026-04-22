@@ -64,8 +64,8 @@ Slightly more natural version:"""
             data = {
                 "model": XAI_MODEL,
                 "messages": [{"role": "user", "content": humanize_prompt}],
-                "temperature": 0.75,
-                "max_tokens": 180,
+                "temperature": 0.84,
+                "max_tokens": 625,
             }
 
             resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=5)
