@@ -145,5 +145,20 @@ def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] =
     conn.commit()
     conn.close()
 
+def summarize_recent_chat(convo_id: str):
+    """Light summarizer for long-term memory (called occasionally)."""
+    history = get_history(convo_id, limit=30)
+    if len(history) < 8:
+        return
+
+    facts = []
+    for msg in history[-15:]:
+        content = msg["content"].lower()
+        if any(word in content for word in ["like", "love", "hate", "favorite", "always", "never", "remember", "miss"]):
+            facts.append(msg["content"][:150])
+
+    for fact in facts[:5]:
+        add_key_fact(convo_id, fact, importance=6)
+
 # Initialize
 init_db()
