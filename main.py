@@ -44,6 +44,8 @@ from memory import (
     summarize_recent_chat
 )
 
+from relationship import get_relationship_level, get_pet_name
+
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 logger.info(f" Model: {XAI_MODEL}")
 logger.info(f" Temperature: {XAI_TEMPERATURE}")
