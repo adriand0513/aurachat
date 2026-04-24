@@ -44,7 +44,11 @@ from memory import (
     summarize_recent_chat
 )
 
-from relationship import get_relationship_level, get_pet_name
+from relationship import (
+    get_relationship_level, 
+    get_pet_name, 
+    update_relationship 
+)
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 logger.info(f" Model: {XAI_MODEL}")
