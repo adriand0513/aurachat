@@ -7,12 +7,13 @@ from typing import Optional
 DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
 
 def init_relationship_table():
+    """Create relationship table if it doesn't exist."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS relationship_state (
             convo_id TEXT PRIMARY KEY,
-            level INTEGER DEFAULT 1,           # 1 = new, 10 = very close
+            level INTEGER DEFAULT 1,
             pet_name TEXT,
             notes TEXT,
             last_interaction DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -35,7 +36,7 @@ def get_pet_name(convo_id: str) -> str:
     c.execute("SELECT pet_name FROM relationship_state WHERE convo_id = ?", (convo_id,))
     row = c.fetchone()
     conn.close()
-    return row[0] if row and row[0] else ""   # Default to empty (no pet names)
+    return row[0] if row and row[0] else ""
 
 def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
     """Update relationship level gradually."""
@@ -53,10 +54,10 @@ def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] =
             level = ?,
             pet_name = COALESCE(?, pet_name),
             notes = COALESCE(notes || '\n' || ?, notes)
-    ''', (convo_id, new_level, pet_name, note, new_level, pet_name, note))
+    ''', (convo_id, new_level, pet_name, note))
     
     conn.commit()
     conn.close()
 
-# Auto initialize
+# Initialize on import
 init_relationship_table()
