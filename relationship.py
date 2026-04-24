@@ -6,55 +6,13 @@ from typing import Optional
 
 DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
 
-def get_relationship_level(convo_id: str) -> int:
-    """Get current relationship level (1-10)."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT level FROM relationship_state WHERE convo_id = ?", (convo_id,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else 1
-
-def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
-    """Increase relationship level and optionally set pet name or note."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    new_level = None
-    if delta != 0:
-        current = get_relationship_level(convo_id)
-        new_level = max(1, min(10, current + delta))
-    
-    c.execute('''
-        INSERT INTO relationship_state (convo_id, level, pet_name, notes, last_interaction)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(convo_id) DO UPDATE SET
-            last_interaction = CURRENT_TIMESTAMP,
-            level = COALESCE(?, level),
-            pet_name = COALESCE(?, pet_name),
-            notes = COALESCE(notes || '\n' || ?, notes)
-    ''', (convo_id, new_level or 1, pet_name, note, new_level, pet_name, note))
-    
-    conn.commit()
-    conn.close()
-
-def get_pet_name(convo_id: str) -> str:
-    """Return current pet name or default."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT pet_name FROM relationship_state WHERE convo_id = ?", (convo_id,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row and row[0] else "babe"
-
-# Initialize relationship table (called from memory.py or here)
 def init_relationship_table():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS relationship_state (
             convo_id TEXT PRIMARY KEY,
-            level INTEGER DEFAULT 1,
+            level INTEGER DEFAULT 1,           # 1 = new, 10 = very close
             pet_name TEXT,
             notes TEXT,
             last_interaction DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -63,4 +21,42 @@ def init_relationship_table():
     conn.commit()
     conn.close()
 
+def get_relationship_level(convo_id: str) -> int:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT level FROM relationship_state WHERE convo_id = ?", (convo_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else 1
+
+def get_pet_name(convo_id: str) -> str:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT pet_name FROM relationship_state WHERE convo_id = ?", (convo_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else ""   # Default to empty (no pet names)
+
+def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
+    """Update relationship level gradually."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    current = get_relationship_level(convo_id)
+    new_level = max(1, min(10, current + delta))
+    
+    c.execute('''
+        INSERT INTO relationship_state (convo_id, level, pet_name, notes, last_interaction)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(convo_id) DO UPDATE SET
+            last_interaction = CURRENT_TIMESTAMP,
+            level = ?,
+            pet_name = COALESCE(?, pet_name),
+            notes = COALESCE(notes || '\n' || ?, notes)
+    ''', (convo_id, new_level, pet_name, note, new_level, pet_name, note))
+    
+    conn.commit()
+    conn.close()
+
+# Auto initialize
 init_relationship_table()
