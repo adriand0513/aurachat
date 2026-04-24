@@ -46,6 +46,7 @@ def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] =
     current = get_relationship_level(convo_id)
     new_level = max(1, min(10, current + delta))
     
+    # Fixed SQL with correct number of bindings
     c.execute('''
         INSERT INTO relationship_state (convo_id, level, pet_name, notes, last_interaction)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -54,10 +55,9 @@ def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] =
             level = ?,
             pet_name = COALESCE(?, pet_name),
             notes = COALESCE(notes || '\n' || ?, notes)
-    ''', (convo_id, new_level, pet_name, note))
+    ''', (convo_id, new_level, pet_name, note, new_level, pet_name, note))
     
     conn.commit()
     conn.close()
-
 # Initialize on import
 init_relationship_table()
