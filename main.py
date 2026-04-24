@@ -263,38 +263,38 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     log_prefix = f"Convo {convo_id}"
     context = get_nyc_context()
 
-    logger.info(f"{log_prefix} Generating reply | NYC: {context['time']} | Weather: {context['weather']}")
-
-    # Get raw history
+    # Get history
     history = get_history(convo_id)
     if len(history) > 40:
         history = history[-40:]
 
-    # ── Long-term Memory & Relationship Integration ───────────────────────
+    # ── Memory + Relationship Integration ───────────────────────
     relevant_facts = get_relevant_facts(convo_id, limit=6)
     rel_level = get_relationship_level(convo_id)
     pet_name = get_pet_name(convo_id)
 
-    # Build concise memory summary
+    # Build memory summary
     memory_summary = ""
     if relevant_facts:
         memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:5])
 
-    # Get base system prompt
     system_prompt = get_system_prompt(
         user_name=None,
         current_time=context["time"],
         weather=context["weather"]
     )
 
-    # Inject memory + relationship context (clean and short)
+    # Inject context cleanly
     if memory_summary:
         system_prompt += f"\n\n{memory_summary}"
     
-    system_prompt += f"\nCurrent relationship closeness with him: Level {rel_level}/10. "
-    system_prompt += f"Use pet name '{pet_name}' naturally when it feels right."
+    system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
+    if pet_name:
+        system_prompt += f" You sometimes call him '{pet_name}' when it feels natural."
+    else:
+        system_prompt += " Avoid using pet names unless he uses one first."
 
-    # Prepare messages for Grok
+    # Prepare messages
     recent_history = history[-28:]
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
@@ -315,47 +315,45 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            logger.error(f"{log_prefix} XAI response body: {e.response.text[:800]}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
     reply = clean_reply(raw_reply)
     bubbles = split_into_bubbles(reply)
     voice_note = ""
 
+    # Emotional voice note logic
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
     if has_emotion and random.random() < 0.75 and bubbles:
         try:
-            last_bubble = bubbles[-1]
-            voice_note = generate_voice_note(last_bubble)
-            if voice_note:
-                logger.info(f"{log_prefix} Voice note generated successfully")
+            voice_note = generate_voice_note(bubbles[-1])
         except Exception as e:
             logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
-            voice_note = ""
 
     # Save messages
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
-    # Occasionally summarize for long-term memory (every ~12 messages)
+    # Occasional memory summarization
     if len(history) % 12 == 0 and len(history) > 10:
         summarize_recent_chat(convo_id)
 
-    # Private CSV log
+    # Auto increase relationship level on positive/flirty moments
+    if has_emotion and random.random() < 0.35:
+        update_relationship(convo_id, delta=1)
+
+    # Private CSV logging (unchanged)
     if bubbles:
-        last_user_message = ""
-        if get_history(convo_id):
-            for msg in reversed(get_history(convo_id)):
+        last_user = ""
+        if history:
+            for msg in reversed(history):
                 if msg["role"] == "user":
-                    last_user_message = msg["content"]
+                    last_user = msg["content"]
                     break
-       
         log_to_csv(
             convo_id=convo_id,
-            user_message=last_user_message,
+            user_message=last_user,
             isabella_reply=" | ".join(bubbles),
             emotion=detect_emotion(" ".join(bubbles)),
             voice_note=bool(voice_note)
