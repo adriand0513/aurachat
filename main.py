@@ -267,17 +267,40 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     log_prefix = f"Convo {convo_id}"
     context = get_nyc_context()
 
-    # Get history
+    # Get full history
     history = get_history(convo_id)
     if len(history) > 40:
         history = history[-40:]
 
-    # ── Memory + Relationship Integration ───────────────────────
+    # ── Silence Detector ─────────────────────────────────────────────────
+    time_gap_minutes = 0
+    silence_note = ""
+
+    if history:
+        last_user_msg = None
+        for msg in reversed(history):
+            if msg["role"] == "user":
+                last_user_msg = msg
+                break
+        
+        if last_user_msg and "timestamp" in last_user_msg:
+            try:
+                last_time = datetime.fromisoformat(str(last_user_msg["timestamp"]).replace("Z", "+00:00"))
+                time_gap_minutes = int((datetime.now(ZoneInfo("UTC")) - last_time).total_seconds() / 60)
+                
+                if time_gap_minutes > 60:   # More than 1 hour
+                    if time_gap_minutes < 1440:   # Same day / less than 24h
+                        silence_note = f"The user just came back after {time_gap_minutes//60} hours of silence. Respond casually like a normal girl would (e.g. 'hey where did you go?' or 'lol I thought you disappeared')."
+                    else:
+                        silence_note = f"The user just came back after more than a day of silence. Respond warmly like you missed chatting with him, but keep it natural and light."
+            except:
+                pass
+
+    # ── Memory + Relationship ────────────────────────────────────────────
     relevant_facts = get_relevant_facts(convo_id, limit=6)
     rel_level = get_relationship_level(convo_id)
     pet_name = get_pet_name(convo_id)
 
-    # Build memory summary
     memory_summary = ""
     if relevant_facts:
         memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:5])
@@ -288,20 +311,28 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         weather=context["weather"]
     )
 
-    # Inject context cleanly
+    # Inject context
     if memory_summary:
         system_prompt += f"\n\n{memory_summary}"
     
     system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
     if pet_name:
-        system_prompt += f" You sometimes call him '{pet_name}' when it feels natural."
+        system_prompt += f" You sometimes call him '{pet_name}' when natural."
     else:
-        system_prompt += " Avoid using pet names unless he uses one first."
+        system_prompt += " Avoid pet names unless he uses one first."
 
-    # Prepare messages
-    recent_history = history[-28:]
+    if silence_note:
+        system_prompt += f"\n\n{silence_note}"
+
+    # Decide how much history to send
+    if time_gap_minutes > 180:   # More than 3 hours silence
+        recent_history = history[-12:]   # Much shorter context
+    else:
+        recent_history = history[-28:]
+
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
+    # Call Grok
     headers = {
         "Authorization": f"Bearer {XAI_API_KEY}",
         "Content-Type": "application/json"
@@ -325,7 +356,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     bubbles = split_into_bubbles(reply)
     voice_note = ""
 
-    # Emotional voice note logic
+    # Voice note logic
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
@@ -343,11 +374,11 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     if len(history) % 12 == 0 and len(history) > 10:
         summarize_recent_chat(convo_id)
 
-    # Auto increase relationship level on positive/flirty moments
+    # Gentle relationship progression
     if has_emotion and random.random() < 0.35:
         update_relationship(convo_id, delta=1)
 
-    # Private CSV logging (unchanged)
+    # Private CSV log
     if bubbles:
         last_user = ""
         if history:
