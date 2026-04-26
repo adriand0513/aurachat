@@ -272,7 +272,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     if len(history) > 40:
         history = history[-40:]
 
-    # ── Silence Detector ─────────────────────────────────────────────────
+    # ── Improved Silence Detector ─────────────────────────────────────
     time_gap_minutes = 0
     silence_note = ""
 
@@ -288,22 +288,22 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
                 last_time = datetime.fromisoformat(str(last_user_msg["timestamp"]).replace("Z", "+00:00"))
                 time_gap_minutes = int((datetime.now(ZoneInfo("UTC")) - last_time).total_seconds() / 60)
                 
-                if time_gap_minutes > 60:   # More than 1 hour
-                    if time_gap_minutes < 1440:   # Same day / less than 24h
-                        silence_note = f"The user just came back after {time_gap_minutes//60} hours of silence. Respond casually like a normal girl would (e.g. 'hey where did you go?' or 'lol I thought you disappeared')."
+                if time_gap_minutes > 60:  # More than 1 hour silence
+                    if time_gap_minutes < 1440:  # Less than 24 hours
+                        silence_note = "The user just came back after several hours. Respond to his new message naturally and casually. Don't continue old topics unless he brings them up."
                     else:
-                        silence_note = f"The user just came back after more than a day of silence. Respond warmly like you missed chatting with him, but keep it natural and light."
+                        silence_note = "The user just came back after more than a day. Greet him warmly like you missed chatting, then respond to what he just said. Don't stay stuck on old conversation topics."
             except:
                 pass
 
-    # ── Memory + Relationship ────────────────────────────────────────────
-    relevant_facts = get_relevant_facts(convo_id, limit=6)
+    # ── Memory + Relationship ────────────────────────────────────────
+    relevant_facts = get_relevant_facts(convo_id, limit=5)  # Reduced
     rel_level = get_relationship_level(convo_id)
     pet_name = get_pet_name(convo_id)
 
     memory_summary = ""
-    if relevant_facts:
-        memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:5])
+    if relevant_facts and time_gap_minutes < 180:  # Only show memory if not long silence
+        memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:4])
 
     system_prompt = get_system_prompt(
         user_name=None,
@@ -311,24 +311,23 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         weather=context["weather"]
     )
 
-    # Inject context
     if memory_summary:
         system_prompt += f"\n\n{memory_summary}"
     
     system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
     if pet_name:
-        system_prompt += f" You sometimes call him '{pet_name}' when natural."
+        system_prompt += f" You sometimes call him '{pet_name}' naturally."
     else:
         system_prompt += " Avoid pet names unless he uses one first."
 
     if silence_note:
         system_prompt += f"\n\n{silence_note}"
 
-    # Decide how much history to send
-    if time_gap_minutes > 180:   # More than 3 hours silence
-        recent_history = history[-12:]   # Much shorter context
+    # Decide history length - this is the biggest fix for repetition
+    if time_gap_minutes > 90:          # After ~1.5 hours silence
+        recent_history = history[-14:] # Much shorter
     else:
-        recent_history = history[-28:]
+        recent_history = history[-22:] # Reduced from -28
 
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
@@ -356,7 +355,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     bubbles = split_into_bubbles(reply)
     voice_note = ""
 
-    # Voice note logic
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
@@ -370,15 +368,14 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     for bubble in bubbles:
         save_message(convo_id, {"role": "assistant", "content": bubble})
 
-    # Occasional memory summarization
+    # Occasional summarization
     if len(history) % 12 == 0 and len(history) > 10:
         summarize_recent_chat(convo_id)
 
-    # Gentle relationship progression
     if has_emotion and random.random() < 0.35:
         update_relationship(convo_id, delta=1)
 
-    # Private CSV log
+    # CSV log
     if bubbles:
         last_user = ""
         if history:
@@ -395,6 +392,5 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         )
 
     return {"replies": bubbles, "voice_note": voice_note}
-
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
