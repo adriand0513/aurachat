@@ -156,8 +156,9 @@
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
         }
-        #clear-chat-btn, #home-btn {
+        #clear-chat-btn {
             padding: 8px 16px;
+            background: linear-gradient(135deg, var(--danger), #d50000);
             color: white;
             border: none;
             border-radius: 50px;
@@ -165,13 +166,7 @@
             font-size: 14px;
             font-weight: 600;
         }
-        #clear-chat-btn {
-            background: linear-gradient(135deg, var(--danger), #d50000);
-        }
-        #home-btn {
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-        }
-        #home-btn:hover, #clear-chat-btn:hover {
+        #clear-chat-btn:hover {
             transform: scale(1.05);
         }
         .avatar-modal {
@@ -269,10 +264,8 @@
                 <h2>Isabella</h2>
             </div>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <button id="home-btn" onclick="goToHome()">Home</button>
-            <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
-        </div>
+        <!-- Home button removed -->
+        <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
     </div>
 
     <!-- Full Avatar Modal -->
@@ -300,14 +293,13 @@
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-        
+       
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = JSON.parse(localStorage.getItem('messages_history') || '[]');
-        
+       
         let userIdleTimeout = null;
         let thinkingTimeout = null;
-
-        const USER_IDLE_PAUSE = 6000;   // 6 seconds as requested
+        const USER_IDLE_PAUSE = 6000;
 
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -339,6 +331,7 @@
             }
         }
 
+        // ... (rest of your script remains the same) ...
         function getThinkingDelay() {
             let delay = 10000 + Math.random() * 15000;
             const lastMessage = messagesHistory[messagesHistory.length - 1];
@@ -360,18 +353,14 @@
         async function sendMessage() {
             const msg = input.value.trim();
             if (!msg) return;
-
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
             input.value = '';
-
             if (userIdleTimeout) clearTimeout(userIdleTimeout);
-
             userIdleTimeout = setTimeout(() => {
                 triggerBotReply();
             }, USER_IDLE_PAUSE);
-
             try {
                 await fetch('/api/send', {
                     method: 'POST',
@@ -387,12 +376,9 @@
 
         async function triggerBotReply() {
             if (thinkingTimeout) clearTimeout(thinkingTimeout);
-
             const thinkingDelay = getThinkingDelay();
-
             thinkingTimeout = setTimeout(async () => {
                 typingIndicator.classList.add('visible');
-
                 try {
                     const res = await fetch('/api/reply', {
                         method: 'POST',
@@ -400,12 +386,10 @@
                         body: JSON.stringify({ convo_id: convoId })
                     });
                     const data = await res.json();
-
                     for (let i = 0; i < data.replies.length; i++) {
                         const bubble = data.replies[i];
                         const isLast = i === data.replies.length - 1;
                         const delay = i === 0 ? 0 : getBubbleGap();
-
                         await new Promise(resolve => {
                             setTimeout(() => {
                                 if (isLast && data.voice_note) {
@@ -445,22 +429,17 @@
                 </div>
                 <div class="voice-duration">0:00</div>
             `;
-
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
-
             let isPlaying = false;
-
             audio.addEventListener('timeupdate', () => {
                 durationEl.textContent = formatTime(audio.currentTime);
             });
-
             audio.addEventListener('ended', () => {
                 isPlaying = false;
                 playBtn.textContent = '▶';
             });
-
             playBtn.addEventListener('click', () => {
                 if (isPlaying) {
                     audio.pause();
@@ -471,7 +450,6 @@
                 }
                 isPlaying = !isPlaying;
             });
-
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
@@ -497,7 +475,6 @@
                 sendMessage();
             }
         });
-
         sendBtn.addEventListener('click', sendMessage);
 
         function openFullAvatar() {
