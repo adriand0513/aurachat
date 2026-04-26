@@ -240,7 +240,14 @@ async def home():
 async def chat_page():
     try:
         with open("static/chat.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
+            content = f.read()
+        
+        response = HTMLResponse(content)
+        # Strong no-cache headers
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     except FileNotFoundError:
         return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
