@@ -3,14 +3,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
-    
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    
     <title>Aurachat</title>
-    <link rel="stylesheet" href="/static/style.css?v=0435" />
-    
+    <link rel="stylesheet" href="/static/style.css" />
     <style>
         :root {
             --bg: #0d0015;
@@ -202,7 +196,14 @@
             color: white;
             font-size: 60px;
             cursor: pointer;
+            transition: all 0.3s;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
         }
+        .avatar-modal-close:hover {
+            color: var(--accent-pink);
+            transform: scale(1.15);
+        }
+        /* Voice Note Styling */
         .voice-note {
             display: flex;
             align-items: center;
@@ -212,6 +213,8 @@
             border-radius: 9999px;
             max-width: 78%;
             align-self: flex-start;
+            border-bottom-left-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
         .voice-play-btn {
             width: 38px;
@@ -225,6 +228,29 @@
             justify-content: center;
             font-size: 18px;
             cursor: pointer;
+            flex-shrink: 0;
+        }
+        .voice-play-btn:hover {
+            background: var(--accent-pink);
+        }
+        .voice-waveform {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 28px;
+            flex: 1;
+        }
+        .voice-bar {
+            width: 4px;
+            background: #a0a0ff;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .voice-duration {
+            font-size: 13.5px;
+            color: var(--text-muted);
+            min-width: 42px;
+            text-align: right;
         }
     </style>
 </head>
@@ -232,7 +258,7 @@
     <div class="chat-header">
         <div class="chat-header-left">
             <div class="avatar-container" onclick="openFullAvatar()">
-                <div class="avatar" style="background-image: url('/static/images/isabella.png?v=0435');"></div>
+                <div class="avatar" style="background-image: url('/static/images/isabella.png');"></div>
             </div>
             <div class="contact-info">
                 <h2>Isabella</h2>
@@ -241,11 +267,13 @@
         <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
     </div>
 
+    <!-- Full Avatar Modal -->
     <div id="avatar-modal" class="avatar-modal">
         <span class="avatar-modal-close" onclick="closeFullAvatar()">×</span>
-        <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png?v=0435" alt="Isabella">
+        <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png" alt="Isabella">
     </div>
 
+    <!-- Main chat area - made more scroll-friendly -->
     <div id="messages-container"></div>
 
     <div id="typing-indicator" class="typing-indicator">
@@ -266,21 +294,71 @@
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
 
-        let convoId = localStorage.getItem('convo_id') || 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-        localStorage.setItem('convo_id', convoId);
+        let convoId = localStorage.getItem('convo_id');
         let messagesHistory = [];
+        let userIdleTimeout = null;
+        const USER_IDLE_PAUSE = 8000;
+
+        if (!convoId) {
+            convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            localStorage.setItem('convo_id', convoId);
+        }
 
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
                 messagesHistory = saved ? JSON.parse(saved) : [];
             } catch (e) {
+                console.warn('Failed to load history, starting fresh');
                 messagesHistory = [];
+                localStorage.removeItem('messages_history');
             }
         }
 
         function saveHistory() {
-            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+            try {
+                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
+            } catch (e) {
+                console.error('Failed to save history:', e);
+            }
+        }
+
+        function initChat() {
+            loadHistory();
+            messagesContainer.innerHTML = '';
+            messagesHistory.forEach(msg => {
+                const type = msg.role === 'user' ? 'sent' : 'received';
+                addMessage(msg.content, type);
+            });
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        window.addEventListener('load', () => {
+            initChat();
+            input.focus();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                saveHistory();
+            } else if (document.visibilityState === 'visible') {
+                initChat();
+            }
+        });
+
+        window.addEventListener('pagehide', () => {
+            saveHistory();
+        });
+
+        function clearConversation() {
+            if (confirm("Clear this conversation?")) {
+                localStorage.removeItem('convo_id');
+                localStorage.removeItem('messages_history');
+                messagesHistory = [];
+                convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+                localStorage.setItem('convo_id', convoId);
+                messagesContainer.innerHTML = '';
+            }
         }
 
         function addMessage(text, type) {
@@ -292,7 +370,6 @@
         }
 
         function addVoiceNote(audioUrl) {
-            if (!audioUrl) return;
             const voiceDiv = document.createElement('div');
             voiceDiv.className = 'voice-note message received';
             voiceDiv.innerHTML = `
@@ -309,7 +386,6 @@
                 </div>
                 <div class="voice-duration">0:00</div>
             `;
-
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
@@ -322,7 +398,6 @@
                 isPlaying = false;
                 playBtn.textContent = '▶';
             });
-
             playBtn.addEventListener('click', () => {
                 if (isPlaying) {
                     audio.pause();
@@ -333,7 +408,6 @@
                 }
                 isPlaying = !isPlaying;
             });
-
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
@@ -351,42 +425,60 @@
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             saveHistory();
+
             input.value = '';
 
-            typingIndicator.classList.add('visible');
-
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: msg, 
-                        convo_id: convoId 
-                    })
-                });
-
-                const data = await res.json();
-
-                if (data.replies && data.replies.length > 0) {
-                    for (let bubble of data.replies) {
-                        addMessage(bubble, 'received');
-                        messagesHistory.push({ role: 'assistant', content: bubble });
-                    }
-                    if (data.voice_note) {
-                        addVoiceNote(data.voice_note);
-                    }
-                    saveHistory();
-                }
-            } catch (err) {
-                console.error('Chat error:', err);
-            } finally {
-                typingIndicator.classList.remove('visible');
-            }
+            if (userIdleTimeout) clearTimeout(userIdleTimeout);
+            userIdleTimeout = setTimeout(() => {
+                triggerBotReply();
+            }, USER_IDLE_PAUSE);
 
             input.focus();
         }
 
-        // Event Listeners
+        async function triggerBotReply() {
+            typingIndicator.classList.add('visible');
+
+            try {
+                const res = await fetch('/api/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ convo_id: convoId })
+                });
+
+                const data = await res.json();
+
+                if (!data.replies || data.replies.length === 0) {
+                    typingIndicator.classList.remove('visible');
+                    return;
+                }
+
+                for (let i = 0; i < data.replies.length; i++) {
+                    const bubble = data.replies[i];
+                    const isLast = i === data.replies.length - 1;
+                    const delay = i === 0 ? 0 : 2800;
+
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            if (isLast && data.voice_note) {
+                                addVoiceNote(data.voice_note);
+                            } else {
+                                addMessage(bubble, 'received');
+                            }
+                            messagesHistory.push({ role: 'assistant', content: bubble });
+                            saveHistory();
+                            resolve();
+                        }, delay);
+                    });
+                }
+            } catch (err) {
+                console.error('Reply error:', err);
+            } finally {
+                typingIndicator.classList.remove('visible');
+            }
+        }
+
+        // Event listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -395,13 +487,15 @@
         });
 
         sendBtn.addEventListener('click', sendMessage);
-        sendBtn.addEventListener('touchend', e => {
+        sendBtn.addEventListener('touchend', (e) => {
             e.preventDefault();
             sendMessage();
         });
 
         function openFullAvatar() {
-            document.getElementById('avatar-modal').classList.add('show');
+            const modal = document.getElementById('avatar-modal');
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('show'), 10);
         }
 
         function closeFullAvatar() {
@@ -410,22 +504,16 @@
             setTimeout(() => modal.style.display = 'none', 300);
         }
 
+        window.onclick = function(event) {
+            const modal = document.getElementById('avatar-modal');
+            if (event.target === modal) closeFullAvatar();
+        };
+
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, 100);
         }
-
-        // Initialize
-        window.addEventListener('load', () => {
-            loadHistory();
-            messagesContainer.innerHTML = '';
-            messagesHistory.forEach(msg => {
-                addMessage(msg.content, msg.role === 'user' ? 'sent' : 'received');
-            });
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            input.focus();
-        });
 
         window.addEventListener('resize', handleKeyboard);
         window.addEventListener('orientationchange', handleKeyboard);
