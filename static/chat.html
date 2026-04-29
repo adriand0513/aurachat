@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     
     <title>Aurachat</title>
-    <link rel="stylesheet" href="/static/style.css?v=0432" />
+    <link rel="stylesheet" href="/static/style.css?v=0435" />
     
     <style>
         :root {
@@ -202,8 +202,6 @@
             color: white;
             font-size: 60px;
             cursor: pointer;
-            transition: all 0.3s;
-            text-shadow: 0 0 10px rgba(0,0,0,0.8);
         }
         .voice-note {
             display: flex;
@@ -214,8 +212,6 @@
             border-radius: 9999px;
             max-width: 78%;
             align-self: flex-start;
-            border-bottom-left-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
         .voice-play-btn {
             width: 38px;
@@ -236,7 +232,7 @@
     <div class="chat-header">
         <div class="chat-header-left">
             <div class="avatar-container" onclick="openFullAvatar()">
-                <div class="avatar" style="background-image: url('/static/images/isabella.png?v=0432');"></div>
+                <div class="avatar" style="background-image: url('/static/images/isabella.png?v=0435');"></div>
             </div>
             <div class="contact-info">
                 <h2>Isabella</h2>
@@ -247,7 +243,7 @@
 
     <div id="avatar-modal" class="avatar-modal">
         <span class="avatar-modal-close" onclick="closeFullAvatar()">×</span>
-        <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png?v=0432" alt="Isabella">
+        <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png?v=0435" alt="Isabella">
     </div>
 
     <div id="messages-container"></div>
@@ -269,11 +265,11 @@
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-    
+
         let convoId = localStorage.getItem('convo_id') || 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
         localStorage.setItem('convo_id', convoId);
         let messagesHistory = [];
-    
+
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
@@ -282,11 +278,11 @@
                 messagesHistory = [];
             }
         }
-    
+
         function saveHistory() {
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
         }
-    
+
         function addMessage(text, type) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${type}`;
@@ -294,10 +290,9 @@
             messagesContainer.appendChild(msgDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-    
+
         function addVoiceNote(audioUrl) {
             if (!audioUrl) return;
-            
             const voiceDiv = document.createElement('div');
             voiceDiv.className = 'voice-note message received';
             voiceDiv.innerHTML = `
@@ -314,12 +309,12 @@
                 </div>
                 <div class="voice-duration">0:00</div>
             `;
-    
+
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
             let isPlaying = false;
-    
+
             audio.addEventListener('timeupdate', () => {
                 durationEl.textContent = formatTime(audio.currentTime);
             });
@@ -327,7 +322,7 @@
                 isPlaying = false;
                 playBtn.textContent = '▶';
             });
-    
+
             playBtn.addEventListener('click', () => {
                 if (isPlaying) {
                     audio.pause();
@@ -338,30 +333,30 @@
                 }
                 isPlaying = !isPlaying;
             });
-    
+
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-    
+
         function formatTime(seconds) {
             const min = Math.floor(seconds / 60);
             const sec = Math.floor(seconds % 60);
             return `${min}:${sec.toString().padStart(2, '0')}`;
         }
-    
+
         async function sendMessage() {
             const msg = input.value.trim();
             if (!msg) return;
-    
+
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             saveHistory();
             input.value = '';
-    
+
             typingIndicator.classList.add('visible');
-    
+
             try {
-                await fetch('/api/send', {
+                const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -369,14 +364,28 @@
                         convo_id: convoId 
                     })
                 });
+
+                const data = await res.json();
+
+                if (data.replies && data.replies.length > 0) {
+                    for (let bubble of data.replies) {
+                        addMessage(bubble, 'received');
+                        messagesHistory.push({ role: 'assistant', content: bubble });
+                    }
+                    if (data.voice_note) {
+                        addVoiceNote(data.voice_note);
+                    }
+                    saveHistory();
+                }
             } catch (err) {
-                console.error('Send error:', err);
+                console.error('Chat error:', err);
+            } finally {
                 typingIndicator.classList.remove('visible');
             }
-    
+
             input.focus();
         }
-    
+
         // Event Listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -384,51 +393,44 @@
                 sendMessage();
             }
         });
-    
+
         sendBtn.addEventListener('click', sendMessage);
-        sendBtn.addEventListener('touchend', (e) => {
+        sendBtn.addEventListener('touchend', e => {
             e.preventDefault();
             sendMessage();
         });
-    
+
         function openFullAvatar() {
-            const modal = document.getElementById('avatar-modal');
-            modal.style.display = 'flex';
-            setTimeout(() => modal.classList.add('show'), 10);
+            document.getElementById('avatar-modal').classList.add('show');
         }
-    
+
         function closeFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.classList.remove('show');
             setTimeout(() => modal.style.display = 'none', 300);
         }
-    
+
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, 100);
         }
-    
+
         // Initialize
         window.addEventListener('load', () => {
             loadHistory();
             messagesContainer.innerHTML = '';
             messagesHistory.forEach(msg => {
-                const type = msg.role === 'user' ? 'sent' : 'received';
-                addMessage(msg.content, type);
+                addMessage(msg.content, msg.role === 'user' ? 'sent' : 'received');
             });
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
             input.focus();
         });
-    
+
         window.addEventListener('resize', handleKeyboard);
         window.addEventListener('orientationchange', handleKeyboard);
         input.addEventListener('focus', handleKeyboard);
         input.addEventListener('blur', handleKeyboard);
-    
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') saveHistory();
-        });
     </script>
 </body>
 </html>
