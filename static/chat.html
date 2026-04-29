@@ -206,59 +206,6 @@
             transition: all 0.3s;
             text-shadow: 0 0 10px rgba(0,0,0,0.8);
         }
-        .avatar-modal-close:hover {
-            color: var(--accent-pink);
-            transform: scale(1.15);
-        }
-        /* Voice Note Styling */
-        .voice-note {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            background: rgba(45, 30, 75, 0.95);
-            border-radius: 9999px;
-            max-width: 78%;
-            align-self: flex-start;
-            border-bottom-left-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-        .voice-play-btn {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background: var(--accent-purple);
-            color: white;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .voice-play-btn:hover {
-            background: var(--accent-pink);
-        }
-        .voice-waveform {
-            display: flex;
-            align-items: center;
-            gap: 3px;
-            height: 28px;
-            flex: 1;
-        }
-        .voice-bar {
-            width: 4px;
-            background: #a0a0ff;
-            border-radius: 2px;
-            flex-shrink: 0;
-        }
-        .voice-duration {
-            font-size: 13.5px;
-            color: var(--text-muted);
-            min-width: 42px;
-            text-align: right;
-        }
     </style>
 </head>
 <body>
@@ -274,7 +221,6 @@
         <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
     </div>
 
-    <!-- Full Avatar Modal -->
     <div id="avatar-modal" class="avatar-modal">
         <span class="avatar-modal-close" onclick="closeFullAvatar()">×</span>
         <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png?v=0430" alt="Isabella">
@@ -300,13 +246,10 @@
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
 
-        let convoId = localStorage.getItem('convo_id');
-        let messagesHistory = [];
+        let convoId = localStorage.getItem('convo_id') || 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        localStorage.setItem('convo_id', convoId);
 
-        if (!convoId) {
-            convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-            localStorage.setItem('convo_id', convoId);
-        }
+        let messagesHistory = [];
 
         function loadHistory() {
             try {
@@ -318,19 +261,7 @@
         }
 
         function saveHistory() {
-            try {
-                localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-            } catch (e) {}
-        }
-
-        function initChat() {
-            loadHistory();
-            messagesContainer.innerHTML = '';
-            messagesHistory.forEach(msg => {
-                const type = msg.role === 'user' ? 'sent' : 'received';
-                addMessage(msg.content, type);
-            });
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
         }
 
         function addMessage(text, type) {
@@ -338,28 +269,6 @@
             msgDiv.className = `message ${type}`;
             msgDiv.textContent = text;
             messagesContainer.appendChild(msgDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function addVoiceNote(audioUrl) {
-            const voiceDiv = document.createElement('div');
-            voiceDiv.className = 'voice-note message received';
-            voiceDiv.innerHTML = `
-                <button class="voice-play-btn">▶</button>
-                <div class="voice-waveform">
-                    <div class="voice-bar" style="height: 18px;"></div>
-                    <div class="voice-bar" style="height: 26px;"></div>
-                    <div class="voice-bar" style="height: 14px;"></div>
-                    <div class="voice-bar" style="height: 30px;"></div>
-                    <div class="voice-bar" style="height: 22px;"></div>
-                    <div class="voice-bar" style="height: 16px;"></div>
-                    <div class="voice-bar" style="height: 28px;"></div>
-                    <div class="voice-bar" style="height: 20px;"></div>
-                </div>
-                <div class="voice-duration">0:00</div>
-            `;
-            // Voice note functionality (simplified)
-            messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
@@ -372,7 +281,9 @@
             saveHistory();
             input.value = '';
 
-            // Immediately send to backend
+            // Show typing immediately
+            typingIndicator.classList.add('visible');
+
             try {
                 await fetch('/api/send', {
                     method: 'POST',
@@ -380,7 +291,7 @@
                     body: JSON.stringify({ message: msg, convo_id: convoId })
                 });
             } catch (err) {
-                console.error('Send error:', err);
+                console.error(err);
             }
 
             input.focus();
@@ -395,15 +306,13 @@
         });
 
         sendBtn.addEventListener('click', sendMessage);
-        sendBtn.addEventListener('touchend', (e) => {
+        sendBtn.addEventListener('touchend', e => {
             e.preventDefault();
             sendMessage();
         });
 
         function openFullAvatar() {
-            const modal = document.getElementById('avatar-modal');
-            modal.style.display = 'flex';
-            setTimeout(() => modal.classList.add('show'), 10);
+            document.getElementById('avatar-modal').classList.add('show');
         }
 
         function closeFullAvatar() {
@@ -412,27 +321,19 @@
             setTimeout(() => modal.style.display = 'none', 300);
         }
 
-        window.onclick = function(event) {
-            const modal = document.getElementById('avatar-modal');
-            if (event.target === modal) closeFullAvatar();
-        };
-
         function handleKeyboard() {
-            setTimeout(() => {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 100);
+            setTimeout(() => messagesContainer.scrollTop = messagesContainer.scrollHeight, 100);
         }
+
+        window.addEventListener('load', () => {
+            loadHistory();
+            messagesHistory.forEach(msg => addMessage(msg.content, msg.role === 'user' ? 'sent' : 'received'));
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            input.focus();
+        });
 
         window.addEventListener('resize', handleKeyboard);
         window.addEventListener('orientationchange', handleKeyboard);
-        input.addEventListener('focus', handleKeyboard);
-        input.addEventListener('blur', handleKeyboard);
-
-        // Initialize
-        window.addEventListener('load', () => {
-            initChat();
-            input.focus();
-        });
     </script>
 </body>
 </html>
