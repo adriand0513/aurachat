@@ -207,45 +207,53 @@ def split_into_bubbles(text: str) -> List[str]:
 
 # ── Background Task with Delay ─────────────────────────────────────────────
 async def delayed_reply_task(convo_id: str):
-    """6s silence window + 8-14s thinking delay"""
-    await asyncio.sleep(6)
-    thinking_time = random.uniform(8, 14)
-    await asyncio.sleep(thinking_time)
-    await generate_normal_reply(convo_id)
+    try:
+        logger.info(f"[Background] Starting delay for {convo_id}")
+        await asyncio.sleep(6)
+        thinking_time = random.uniform(8, 14)
+        await asyncio.sleep(thinking_time)
+        logger.info(f"[Background] Starting reply generation for {convo_id}")
+        await generate_normal_reply(convo_id)
+    except Exception as e:
+        logger.error(f"[Background Task Error] {convo_id}: {e}", exc_info=True)
 
 async def generate_normal_reply(convo_id: str):
-    """Your original reply logic"""
-    context = get_nyc_context()
-    history = get_history(convo_id)
-    if len(history) > 40:
-        history = history[-40:]
-
-    relevant_facts = get_relevant_facts(convo_id, limit=5)
-    rel_level = get_relationship_level(convo_id)
-    pet_name = get_pet_name(convo_id)
-
-    memory_summary = ""
-    if relevant_facts:
-        memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:4])
-
-    system_prompt = get_system_prompt(
-        user_name=None,
-        current_time=context["time"],
-        weather=context["weather"]
-    )
-
-    if memory_summary:
-        system_prompt += f"\n\n{memory_summary}"
-    system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
-    if pet_name:
-        system_prompt += f" You sometimes call him '{pet_name}' naturally."
-    else:
-        system_prompt += " Avoid pet names unless he uses one first."
-
-    recent_history = history[-22:]
-    messages = [{"role": "system", "content": system_prompt}] + recent_history
-
+    """Core reply generation with improved logging and error handling"""
+    log_prefix = f"Reply {convo_id}"
     try:
+        logger.info(f"{log_prefix} - Starting reply generation")
+
+        context = get_nyc_context()
+        history = get_history(convo_id)
+        if len(history) > 40:
+            history = history[-40:]
+
+        relevant_facts = get_relevant_facts(convo_id, limit=5)
+        rel_level = get_relationship_level(convo_id)
+        pet_name = get_pet_name(convo_id)
+
+        memory_summary = ""
+        if relevant_facts:
+            memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:4])
+
+        system_prompt = get_system_prompt(
+            user_name=None,
+            current_time=context["time"],
+            weather=context["weather"]
+        )
+
+        if memory_summary:
+            system_prompt += f"\n\n{memory_summary}"
+        system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
+        if pet_name:
+            system_prompt += f" You sometimes call him '{pet_name}' naturally."
+        else:
+            system_prompt += " Avoid pet names unless he uses one first."
+
+        recent_history = history[-22:]
+        messages = [{"role": "system", "content": system_prompt}] + recent_history
+
+        # Call Grok
         headers = {"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"}
         data = {
             "model": XAI_MODEL,
@@ -253,49 +261,56 @@ async def generate_normal_reply(convo_id: str):
             "temperature": XAI_TEMPERATURE,
             "max_tokens": XAI_MAX_TOKENS,
         }
-        resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=90)
+
+        logger.info(f"{log_prefix} - Calling xAI API")
+        resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=75)
         resp.raise_for_status()
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
+
+        reply = clean_reply(raw_reply)
+        bubbles = split_into_bubbles(reply)
+
+        voice_note = ""
+        emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
+        has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
+
+        if has_emotion and random.random() < 0.75 and bubbles:
+            try:
+                voice_note = generate_voice_note(bubbles[-1])
+            except Exception as e:
+                logger.error(f"{log_prefix} ElevenLabs FAILED: {e}")
+
+        # Save messages
+        for bubble in bubbles:
+            save_message(convo_id, {"role": "assistant", "content": bubble})
+
+        # Occasional memory & relationship updates
+        if len(history) % 12 == 0 and len(history) > 10:
+            summarize_recent_chat(convo_id)
+
+        if has_emotion and random.random() < 0.35:
+            update_relationship(convo_id, delta=1)
+
+        # CSV log
+        last_user = ""
+        if history:
+            for msg in reversed(history):
+                if msg["role"] == "user":
+                    last_user = msg["content"]
+                    break
+
+        log_to_csv(
+            convo_id=convo_id,
+            user_message=last_user,
+            isabella_reply=" | ".join(bubbles),
+            emotion=detect_emotion(" ".join(bubbles)),
+            voice_note=bool(voice_note)
+        )
+
+        logger.info(f"{log_prefix} - SUCCESS: Sent {len(bubbles)} bubbles")
+
     except Exception as e:
-        logger.error(f"XAI FAILURE for {convo_id}: {e}")
-        return
-
-    reply = clean_reply(raw_reply)
-    bubbles = split_into_bubbles(reply)
-    voice_note = ""
-
-    emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
-    has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
-
-    if has_emotion and random.random() < 0.75 and bubbles:
-        try:
-            voice_note = generate_voice_note(bubbles[-1])
-        except Exception as e:
-            logger.error(f"ElevenLabs FAILURE: {e}")
-
-    for bubble in bubbles:
-        save_message(convo_id, {"role": "assistant", "content": bubble})
-
-    if len(history) % 12 == 0 and len(history) > 10:
-        summarize_recent_chat(convo_id)
-
-    if has_emotion and random.random() < 0.35:
-        update_relationship(convo_id, delta=1)
-
-    # CSV log
-    last_user = ""
-    if history:
-        for msg in reversed(history):
-            if msg["role"] == "user":
-                last_user = msg["content"]
-                break
-    log_to_csv(
-        convo_id=convo_id,
-        user_message=last_user,
-        isabella_reply=" | ".join(bubbles),
-        emotion=detect_emotion(" ".join(bubbles)),
-        voice_note=bool(voice_note)
-    )
+        logger.error(f"{log_prefix} - FAILED: {e}", exc_info=True)
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 @app.get("/")
