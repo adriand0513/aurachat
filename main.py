@@ -50,7 +50,9 @@ from relationship import (
 )
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
-logger.info(f" Model: {XAI_MODEL} | Temp: {XAI_TEMPERATURE} | Tokens: {XAI_MAX_TOKENS}")
+logger.info(f" Model: {XAI_MODEL}")
+logger.info(f" Temperature: {XAI_TEMPERATURE}")
+logger.info(f" Max tokens: {XAI_MAX_TOKENS}")
 logger.info("---")
 
 app = FastAPI(title="Isabella Chatbot")
@@ -212,7 +214,7 @@ async def delayed_reply_task(convo_id: str):
     await generate_normal_reply(convo_id)
 
 async def generate_normal_reply(convo_id: str):
-    """Core reply generation logic"""
+    """Your original reply logic"""
     context = get_nyc_context()
     history = get_history(convo_id)
     if len(history) > 40:
@@ -328,6 +330,7 @@ async def send_message(body: Dict[str, str] = Body(...), background_tasks: Backg
 
     save_message(convo_id, {"role": "user", "content": message})
 
+    # Start delayed reply in background
     if background_tasks:
         background_tasks.add_task(delayed_reply_task, convo_id)
 
