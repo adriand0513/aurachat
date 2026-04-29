@@ -269,22 +269,24 @@
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-
+    
         let convoId = localStorage.getItem('convo_id') || 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
         localStorage.setItem('convo_id', convoId);
         let messagesHistory = [];
-
+    
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
                 messagesHistory = saved ? JSON.parse(saved) : [];
-            } catch (e) { messagesHistory = []; }
+            } catch (e) {
+                messagesHistory = [];
+            }
         }
-
+    
         function saveHistory() {
             localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
         }
-
+    
         function addMessage(text, type) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${type}`;
@@ -292,72 +294,140 @@
             messagesContainer.appendChild(msgDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
         function addVoiceNote(audioUrl) {
             if (!audioUrl) return;
-            // Voice note UI (placeholder for now)
+            
             const voiceDiv = document.createElement('div');
             voiceDiv.className = 'voice-note message received';
-            voiceDiv.innerHTML = `<button class="voice-play-btn">▶</button> Voice Note`;
+            voiceDiv.innerHTML = `
+                <button class="voice-play-btn">▶</button>
+                <div class="voice-waveform">
+                    <div class="voice-bar" style="height: 18px;"></div>
+                    <div class="voice-bar" style="height: 26px;"></div>
+                    <div class="voice-bar" style="height: 14px;"></div>
+                    <div class="voice-bar" style="height: 30px;"></div>
+                    <div class="voice-bar" style="height: 22px;"></div>
+                    <div class="voice-bar" style="height: 16px;"></div>
+                    <div class="voice-bar" style="height: 28px;"></div>
+                    <div class="voice-bar" style="height: 20px;"></div>
+                </div>
+                <div class="voice-duration">0:00</div>
+            `;
+    
+            const playBtn = voiceDiv.querySelector('.voice-play-btn');
+            const durationEl = voiceDiv.querySelector('.voice-duration');
+            const audio = new Audio(audioUrl);
+            let isPlaying = false;
+    
+            audio.addEventListener('timeupdate', () => {
+                durationEl.textContent = formatTime(audio.currentTime);
+            });
+            audio.addEventListener('ended', () => {
+                isPlaying = false;
+                playBtn.textContent = '▶';
+            });
+    
+            playBtn.addEventListener('click', () => {
+                if (isPlaying) {
+                    audio.pause();
+                    playBtn.textContent = '▶';
+                } else {
+                    audio.play();
+                    playBtn.textContent = '❚❚';
+                }
+                isPlaying = !isPlaying;
+            });
+    
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec.toString().padStart(2, '0')}`;
+        }
+    
         async function sendMessage() {
             const msg = input.value.trim();
             if (!msg) return;
-
+    
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             saveHistory();
             input.value = '';
-
+    
             typingIndicator.classList.add('visible');
-
+    
             try {
                 await fetch('/api/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg, convo_id: convoId })
+                    body: JSON.stringify({ 
+                        message: msg, 
+                        convo_id: convoId 
+                    })
                 });
             } catch (err) {
-                console.error(err);
+                console.error('Send error:', err);
+                typingIndicator.classList.remove('visible');
             }
-
+    
             input.focus();
         }
-
+    
+        // Event Listeners
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
         });
-
+    
         sendBtn.addEventListener('click', sendMessage);
-        sendBtn.addEventListener('touchend', e => {
+        sendBtn.addEventListener('touchend', (e) => {
             e.preventDefault();
             sendMessage();
         });
-
+    
         function openFullAvatar() {
-            document.getElementById('avatar-modal').classList.add('show');
+            const modal = document.getElementById('avatar-modal');
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('show'), 10);
         }
-
+    
         function closeFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.classList.remove('show');
             setTimeout(() => modal.style.display = 'none', 300);
         }
-
+    
+        function handleKeyboard() {
+            setTimeout(() => {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }, 100);
+        }
+    
+        // Initialize
         window.addEventListener('load', () => {
             loadHistory();
             messagesContainer.innerHTML = '';
             messagesHistory.forEach(msg => {
-                addMessage(msg.content, msg.role === 'user' ? 'sent' : 'received');
+                const type = msg.role === 'user' ? 'sent' : 'received';
+                addMessage(msg.content, type);
             });
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
             input.focus();
+        });
+    
+        window.addEventListener('resize', handleKeyboard);
+        window.addEventListener('orientationchange', handleKeyboard);
+        input.addEventListener('focus', handleKeyboard);
+        input.addEventListener('blur', handleKeyboard);
+    
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') saveHistory();
         });
     </script>
 </body>
