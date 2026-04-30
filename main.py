@@ -261,6 +261,15 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     if not convo_id:
         raise HTTPException(400, "convo_id required")
 
+    # === NEW BACKEND GUARD ===
+    now = time.time()
+    if now - last_reply_time[convo_id] < REPLY_COOLDOWN_SECONDS:
+        logger.info(f"Duplicate reply blocked for convo {convo_id} (cooldown)")
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
+    
+    last_reply_time[convo_id] = now
+    # =========================
+
     if is_rate_limited(convo_id):
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
