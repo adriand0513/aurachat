@@ -266,30 +266,49 @@
     </div>
 
     <script>
-        // === MOBILE VIEWPORT FIX ===
+        // === SAFARI SCROLL FIX + MOBILE VIEWPORT ===
+        function forceScrollFix() {
+            // Force Safari to recognize scrollable content
+            document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+            
+            const messages = document.getElementById('messages-container');
+            if (messages) {
+                const originalHeight = messages.style.minHeight;
+                messages.style.minHeight = 'auto';
+                void messages.offsetHeight;           // Force reflow
+                messages.style.minHeight = originalHeight || '';
+            }
+            
+            // Small trick to wake up scrolling
+            document.body.style.paddingBottom = '1px';
+            setTimeout(() => {
+                document.body.style.paddingBottom = '0px';
+            }, 50);
+        }
+    
         function fixMobileViewport() {
             document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
             document.body.style.height = '100dvh';
+            forceScrollFix();   // Combine both fixes
         }
-
+    
         // Main variables
         const messagesContainer = document.getElementById('messages-container');
         const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-
+    
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = [];
         let userIdleTimeout = null;
         let isSending = false;
-
         const USER_IDLE_PAUSE = 8000;
-
+    
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
         }
-
+    
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
@@ -300,7 +319,7 @@
                 localStorage.removeItem('messages_history');
             }
         }
-
+    
         function saveHistory() {
             try {
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
@@ -308,7 +327,7 @@
                 console.error('Failed to save history:', e);
             }
         }
-
+    
         function initChat() {
             loadHistory();
             messagesContainer.innerHTML = '';
@@ -318,17 +337,24 @@
             });
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
         window.addEventListener('load', () => {
             initChat();
             input.focus();
             fixMobileViewport();
+            forceScrollFix();           // Extra call
         });
-
-        // Viewport fix listeners
+    
+        // Viewport + Scroll fixes
         window.addEventListener('resize', fixMobileViewport);
         window.addEventListener('orientationchange', fixMobileViewport);
-
+        window.addEventListener('focus', forceScrollFix);
+    
+        // Multiple attempts to wake Safari
+        setTimeout(forceScrollFix, 200);
+        setTimeout(forceScrollFix, 600);
+        setTimeout(forceScrollFix, 1200);
+    
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
                 saveHistory();
@@ -336,11 +362,11 @@
                 initChat();
             }
         });
-
+    
         window.addEventListener('pagehide', () => {
             saveHistory();
         });
-
+    
         function clearConversation() {
             if (confirm("Clear this conversation?")) {
                 localStorage.removeItem('convo_id');
@@ -351,7 +377,7 @@
                 messagesContainer.innerHTML = '';
             }
         }
-
+    
         function addMessage(text, type) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${type}`;
@@ -359,7 +385,7 @@
             messagesContainer.appendChild(msgDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
         function addVoiceNote(audioUrl) {
             const voiceDiv = document.createElement('div');
             voiceDiv.className = 'voice-note message received';
@@ -381,13 +407,13 @@
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
             let isPlaying = false;
-
+    
             audio.addEventListener('timeupdate', () => durationEl.textContent = formatTime(audio.currentTime));
             audio.addEventListener('ended', () => {
                 isPlaying = false;
                 playBtn.textContent = '▶';
             });
-
+    
             playBtn.addEventListener('click', () => {
                 if (isPlaying) {
                     audio.pause();
@@ -398,61 +424,60 @@
                 }
                 isPlaying = !isPlaying;
             });
-
+    
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
         function formatTime(seconds) {
             const min = Math.floor(seconds / 60);
             const sec = Math.floor(seconds % 60);
             return `${min}:${sec.toString().padStart(2, '0')}`;
         }
-
+    
         async function sendMessage() {
             if (isSending) return;
             const msg = input.value.trim();
             if (!msg) return;
-
+    
             isSending = true;
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             saveHistory();
             input.value = '';
-
+    
             if (userIdleTimeout) clearTimeout(userIdleTimeout);
             userIdleTimeout = setTimeout(() => triggerBotReply(), USER_IDLE_PAUSE);
-
+    
             input.focus();
-
             setTimeout(() => isSending = false, 1500);
         }
-
+    
         async function triggerBotReply() {
             if (isSending) return;
             isSending = true;
             typingIndicator.classList.add('visible');
-
+    
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ convo_id: convoId })
                 });
-
+    
                 const data = await res.json();
-
+    
                 if (!data.replies || data.replies.length === 0) {
                     typingIndicator.classList.remove('visible');
                     isSending = false;
                     return;
                 }
-
+    
                 for (let i = 0; i < data.replies.length; i++) {
                     const bubble = data.replies[i];
                     const isLast = i === data.replies.length - 1;
                     const delay = i === 0 ? 0 : 2800;
-
+    
                     await new Promise(resolve => {
                         setTimeout(() => {
                             if (isLast && data.voice_note) {
@@ -473,7 +498,7 @@
                 isSending = false;
             }
         }
-
+    
         function handleSend(e) {
             if (e) {
                 e.preventDefault();
@@ -481,40 +506,40 @@
             }
             sendMessage();
         }
-
+    
         sendBtn.addEventListener('click', handleSend);
         sendBtn.addEventListener('touchend', handleSend);
-
+    
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSend(e);
             }
         });
-
+    
         function handleKeyboard() {
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, 100);
         }
-
+    
         window.addEventListener('resize', handleKeyboard);
         window.addEventListener('orientationchange', handleKeyboard);
         input.addEventListener('focus', handleKeyboard);
         input.addEventListener('blur', handleKeyboard);
-
+    
         function openFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.style.display = 'flex';
             setTimeout(() => modal.classList.add('show'), 10);
         }
-
+    
         function closeFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.classList.remove('show');
             setTimeout(() => modal.style.display = 'none', 300);
         }
-
+    
         window.onclick = function(event) {
             const modal = document.getElementById('avatar-modal');
             if (event.target === modal) closeFullAvatar();
