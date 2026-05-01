@@ -60,6 +60,14 @@ app = FastAPI(title="Isabella Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(analytics_router)
 
+
+from collections import defaultdict
+import time
+
+# ── Backend Anti-Duplicate Guard ─────────────────────────────────────
+last_reply_time = defaultdict(float)   # convo_id → timestamp of last reply
+REPLY_COOLDOWN_SECONDS = 6             # Adjust if needed (4-8 seconds is good)
+
 # ── Private CSV Logging (ONLY FOR YOUR USE) ─────────────────────────────────
 CSV_LOG_FILE = "isabella_private_logs.csv"
 
