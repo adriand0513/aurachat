@@ -248,7 +248,19 @@ async def home():
 async def chat_page():
     try:
         with open("static/chat.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
+            content = f.read()
+        
+        response = HTMLResponse(content)
+        
+        # FORCE FRESH LOAD - No more caching issues
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
+        # Extra safety for Safari
+        response.headers["Surrogate-Control"] = "no-store"
+        
+        return response
     except FileNotFoundError:
         return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
