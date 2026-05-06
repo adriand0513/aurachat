@@ -323,10 +323,11 @@
 
     <script>
         // ── Resize #app to exact window.innerHeight (bypasses Safari chrome) ──
-        function sizeApp() {
-            document.getElementById('app').style.height = window.innerHeight + 'px';
+       function sizeApp() {
+            const h = window.innerHeight;
+            document.getElementById('app').style.height = h + 'px';
+            document.title = 'H:' + h; // Shows height in browser tab
         }
-        sizeApp();
         window.addEventListener('resize', sizeApp);
 
         // ── Main variables ──
