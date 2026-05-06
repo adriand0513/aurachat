@@ -348,7 +348,7 @@
         let messagesHistory = [];
         let userIdleTimeout = null;
         let isSending = false;
-        const USER_IDLE_PAUSE = 8000;
+        const USER_IDLE_PAUSE = 4000;        // ← Changed to 4 seconds
     
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -388,13 +388,10 @@
     
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
-            // === AUTO RECOVER PENDING REPLY ===
+            // Auto-recover pending reply
             const lastMsg = messagesHistory[messagesHistory.length - 1];
             if (lastMsg && lastMsg.role === 'user') {
-                // Last message was from user and no reply yet → recover
-                setTimeout(() => {
-                    triggerBotReply();
-                }, 1200);
+                setTimeout(() => triggerBotReply(), 800);
             }
         }
     
@@ -537,7 +534,6 @@
                     await new Promise(resolve => {
                         setTimeout(() => {
                             if (isLast && data.voice_note) {
-                                // Save voice note permanently
                                 messagesHistory.push({
                                     role: 'assistant',
                                     content: bubble,
