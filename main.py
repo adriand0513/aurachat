@@ -387,7 +387,7 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
-    if has_emotion and random.random() < 0.75 and bubbles:
+    if has_emotion and random.random() < 0.20 and bubbles:
         try:
             voice_note = generate_voice_note(bubbles[-1])
         except Exception as e:
