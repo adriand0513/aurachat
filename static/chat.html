@@ -322,33 +322,39 @@
     </div>
 
     <script>
-        // ── Resize #app to exact window.innerHeight (bypasses Safari chrome) ──
-       function sizeApp() {
+        // === SAFARI VIEWPORT + SCROLL FIX ===
+        function sizeApp() {
             const h = window.innerHeight;
-            document.getElementById('app').style.height = h + 'px';
+            document.documentElement.style.setProperty('--vh', `${h * 0.01}px`);
+            document.body.style.height = h + 'px';
         }
-        window.addEventListener('resize', sizeApp);
-
-        // ── Main variables ──
+    
+        function forceScrollFix() {
+            const messages = document.getElementById('messages-container');
+            if (messages) {
+                messages.style.minHeight = 'auto';
+                void messages.offsetHeight; // force reflow
+                messages.style.minHeight = '';
+            }
+        }
+    
+        // Main variables
         const messagesContainer = document.getElementById('messages-container');
+        const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-
+    
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = [];
         let userIdleTimeout = null;
         let isSending = false;
         const USER_IDLE_PAUSE = 8000;
-
+    
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
         }
-
-        function getTypingIndicator() {
-            return document.getElementById('typing-indicator');
-        }
-
+    
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
@@ -358,7 +364,7 @@
                 localStorage.removeItem('messages_history');
             }
         }
-
+    
         function saveHistory() {
             try {
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
@@ -366,37 +372,48 @@
                 console.error('Failed to save history:', e);
             }
         }
-
-        function rebuildTypingIndicator() {
-            const existing = document.getElementById('typing-indicator');
-            if (existing) existing.remove();
-            const div = document.createElement('div');
-            div.id = 'typing-indicator';
-            div.className = 'typing-indicator';
-            div.innerHTML = `
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-                <span>Isabella is typing...</span>`;
-            messagesContainer.insertBefore(div, messagesContainer.firstChild);
-        }
-
+    
         function initChat() {
             loadHistory();
             messagesContainer.innerHTML = '';
-            rebuildTypingIndicator();
+    
             messagesHistory.forEach(msg => {
-                addMessage(msg.content, msg.role === 'user' ? 'sent' : 'received');
+                if (msg.voice_note) {
+                    addVoiceNote(msg.voice_note);
+                } else {
+                    const type = msg.role === 'user' ? 'sent' : 'received';
+                    addMessage(msg.content, type);
+                }
             });
+    
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+            // Auto-recover pending reply if last message was from user
+            const lastMsg = messagesHistory[messagesHistory.length - 1];
+            if (lastMsg && lastMsg.role === 'user') {
+                setTimeout(() => {
+                    triggerBotReply();
+                }, 1200);
+            }
         }
-
+    
         window.addEventListener('load', () => {
             sizeApp();
             initChat();
             input.focus();
+            forceScrollFix();
         });
-
+    
+        // Viewport & scroll fixes
+        window.addEventListener('resize', () => {
+            sizeApp();
+            forceScrollFix();
+        });
+        window.addEventListener('orientationchange', () => {
+            sizeApp();
+            forceScrollFix();
+        });
+    
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
                 saveHistory();
@@ -404,9 +421,9 @@
                 initChat();
             }
         });
-
+    
         window.addEventListener('pagehide', saveHistory);
-
+    
         function clearConversation() {
             if (confirm("Clear this conversation?")) {
                 localStorage.removeItem('convo_id');
@@ -415,10 +432,9 @@
                 convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
                 localStorage.setItem('convo_id', convoId);
                 messagesContainer.innerHTML = '';
-                rebuildTypingIndicator();
             }
         }
-
+    
         function addMessage(text, type) {
             const div = document.createElement('div');
             div.className = `message ${type}`;
@@ -426,125 +442,170 @@
             messagesContainer.appendChild(div);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
         function addVoiceNote(audioUrl) {
             const voiceDiv = document.createElement('div');
-            voiceDiv.className = 'voice-note';
+            voiceDiv.className = 'voice-note message received';
             voiceDiv.innerHTML = `
                 <button class="voice-play-btn">▶</button>
                 <div class="voice-waveform">
-                    <div class="voice-bar" style="height:18px"></div>
-                    <div class="voice-bar" style="height:26px"></div>
-                    <div class="voice-bar" style="height:14px"></div>
-                    <div class="voice-bar" style="height:30px"></div>
-                    <div class="voice-bar" style="height:22px"></div>
-                    <div class="voice-bar" style="height:16px"></div>
-                    <div class="voice-bar" style="height:28px"></div>
-                    <div class="voice-bar" style="height:20px"></div>
+                    <div class="voice-bar" style="height: 18px;"></div>
+                    <div class="voice-bar" style="height: 26px;"></div>
+                    <div class="voice-bar" style="height: 14px;"></div>
+                    <div class="voice-bar" style="height: 30px;"></div>
+                    <div class="voice-bar" style="height: 22px;"></div>
+                    <div class="voice-bar" style="height: 16px;"></div>
+                    <div class="voice-bar" style="height: 28px;"></div>
+                    <div class="voice-bar" style="height: 20px;"></div>
                 </div>
-                <div class="voice-duration">0:00</div>`;
+                <div class="voice-duration">0:00</div>
+            `;
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
             let isPlaying = false;
+    
             audio.addEventListener('timeupdate', () => {
-                const m = Math.floor(audio.currentTime / 60);
-                const s = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
-                durationEl.textContent = `${m}:${s}`;
+                durationEl.textContent = formatTime(audio.currentTime);
             });
-            audio.addEventListener('ended', () => { isPlaying = false; playBtn.textContent = '▶'; });
+            audio.addEventListener('ended', () => {
+                isPlaying = false;
+                playBtn.textContent = '▶';
+            });
+    
             playBtn.addEventListener('click', () => {
-                if (isPlaying) { audio.pause(); playBtn.textContent = '▶'; }
-                else { audio.play(); playBtn.textContent = '❚❚'; }
+                if (isPlaying) {
+                    audio.pause();
+                    playBtn.textContent = '▶';
+                } else {
+                    audio.play();
+                    playBtn.textContent = '❚❚';
+                }
                 isPlaying = !isPlaying;
             });
+    
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec.toString().padStart(2, '0')}`;
+        }
+    
         async function sendMessage() {
             if (isSending) return;
             const msg = input.value.trim();
             if (!msg) return;
+    
             isSending = true;
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             saveHistory();
             input.value = '';
+    
             if (userIdleTimeout) clearTimeout(userIdleTimeout);
-            userIdleTimeout = setTimeout(triggerBotReply, USER_IDLE_PAUSE);
+            userIdleTimeout = setTimeout(() => triggerBotReply(), USER_IDLE_PAUSE);
+    
             input.focus();
             setTimeout(() => isSending = false, 1500);
         }
-
+    
         async function triggerBotReply() {
             if (isSending) return;
             isSending = true;
-            const indicator = getTypingIndicator();
-            if (indicator) indicator.classList.add('visible');
+            typingIndicator.classList.add('visible');
+    
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ convo_id: convoId })
                 });
+    
                 const data = await res.json();
-                if (!data.replies || data.replies.length === 0) return;
+    
+                if (!data.replies || data.replies.length === 0) {
+                    typingIndicator.classList.remove('visible');
+                    isSending = false;
+                    return;
+                }
+    
                 for (let i = 0; i < data.replies.length; i++) {
-                    await new Promise(resolve => setTimeout(() => {
-                        const isLast = i === data.replies.length - 1;
-                        if (isLast && data.voice_note) addVoiceNote(data.voice_note);
-                        else addMessage(data.replies[i], 'received');
-                        messagesHistory.push({ role: 'assistant', content: data.replies[i] });
-                        saveHistory();
-                        resolve();
-                    }, i === 0 ? 0 : 2800));
+                    const bubble = data.replies[i];
+                    const isLast = i === data.replies.length - 1;
+                    const delay = i === 0 ? 0 : 2800;
+    
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            if (isLast && data.voice_note) {
+                                messagesHistory.push({
+                                    role: 'assistant',
+                                    content: bubble,
+                                    voice_note: data.voice_note
+                                });
+                                addVoiceNote(data.voice_note);
+                            } else {
+                                addMessage(bubble, 'received');
+                                messagesHistory.push({ role: 'assistant', content: bubble });
+                            }
+                            saveHistory();
+                            resolve();
+                        }, delay);
+                    });
                 }
             } catch (err) {
                 console.error('Reply error:', err);
             } finally {
-                const ind = getTypingIndicator();
-                if (ind) ind.classList.remove('visible');
+                typingIndicator.classList.remove('visible');
                 isSending = false;
             }
         }
-
+    
         function handleSend(e) {
-            if (e) { e.preventDefault(); e.stopImmediatePropagation(); }
+            if (e) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
             sendMessage();
         }
-
+    
         sendBtn.addEventListener('click', handleSend);
         sendBtn.addEventListener('touchend', handleSend);
+    
         input.addEventListener('keypress', e => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend(e);
+            }
         });
-
-        // Scroll to bottom when keyboard opens
+    
+        // Keyboard helpers
         input.addEventListener('focus', () => {
             setTimeout(() => {
                 sizeApp();
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, 300);
         });
-
+    
         window.addEventListener('resize', () => {
             sizeApp();
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         });
-
+    
         function openFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.style.display = 'flex';
             setTimeout(() => modal.classList.add('show'), 10);
         }
-
+    
         function closeFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.classList.remove('show');
             setTimeout(() => modal.style.display = 'none', 300);
         }
-
+    
         window.onclick = function(event) {
             const modal = document.getElementById('avatar-modal');
             if (event.target === modal) closeFullAvatar();
