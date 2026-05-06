@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Aurachat</title>
-    <!-- <link rel="stylesheet" href="/static/style.css" /> -->
     <style>
         :root {
             --bg: #0d0015;
@@ -16,119 +15,121 @@
             --text-muted: #bb99cc;
             --input-bg: rgba(50, 20, 80, 0.6);
         }
-    
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
-    
+
         html, body {
-            height: 100dvh;
-            min-height: -webkit-fill-available;
-            width: 100vw;
-            max-width: 100vw;
-            -webkit-overflow-scrolling: touch;
+            width: 100%;
+            height: 100%;
             background: var(--bg);
             color: var(--text);
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             touch-action: manipulation;
+            overflow: hidden;
         }
-            
-        body {
+
+        /* ── Single wrapper that JS sizes to exact window.innerHeight ── */
+        #app {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: flex;
             flex-direction: column;
         }
-    
+
+        /* ── Header ── */
         .chat-header {
             flex-shrink: 0;
             padding: 12px 16px;
             background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
             backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid rgba(195,0,255,0.12);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            z-index: 100;
+            z-index: 10;
         }
-    
+
+        .chat-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .avatar-container {
+            cursor: pointer;
+        }
+
+        .avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background-size: cover;
+            background-position: center;
+            border: 2px solid var(--accent-purple);
+        }
+
+        .contact-info h2 {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        #clear-chat-btn {
+            padding: 8px 14px;
+            background: linear-gradient(135deg, var(--danger), #d50000);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 13.5px;
+            font-weight: 600;
+        }
+
+        /* ── Messages ── */
         #messages-container {
-            flex: 1 1 auto;
+            flex: 1 1 0;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
-            padding: 16px 16px 90px 16px;
+            padding: 16px 16px 16px;
             display: flex;
             flex-direction: column;
             gap: 12px;
             background: linear-gradient(to bottom, rgba(13,0,21,0.6), transparent);
             scroll-behavior: smooth;
+            overscroll-behavior: contain;
         }
-    
+
         .message {
             max-width: 80%;
             padding: 12px 16px;
             border-radius: 20px;
             font-size: 15.5px;
             line-height: 1.45;
+            word-wrap: break-word;
         }
-    
+
         .sent {
             background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
             color: white;
             align-self: flex-end;
             border-bottom-right-radius: 6px;
         }
-    
+
         .received {
             background: rgba(30,20,50,0.9);
             color: white;
             align-self: flex-start;
             border-bottom-left-radius: 6px;
         }
-    
-        .input-area {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 12px 16px;
-            padding-bottom: max(20px, env(safe-area-inset-bottom));
-            background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
-            backdrop-filter: blur(12px);
-            border-top: 1px solid rgba(195,0,255,0.12);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            z-index: 100;
-        }
-    
-        #user-input {
-            flex: 1;
-            padding: 13px 18px;
-            border: none;
-            border-radius: 30px;
-            background: var(--input-bg);
-            color: white;
-            font-size: 16px !important;
-        }
-    
-        #user-input:focus {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(195,0,255,0.3);
-        }
-    
-        #send-btn {
-            width: 46px;
-            height: 46px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
-            color: white;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-    
+
+        /* ── Typing indicator ── */
         .typing-indicator {
             display: flex;
             align-items: center;
@@ -144,12 +145,12 @@
             opacity: 0;
             transition: opacity 0.3s ease;
         }
-    
+
         .typing-indicator.visible {
             visibility: visible;
             opacity: 1;
         }
-    
+
         .typing-dot {
             width: 8px;
             height: 8px;
@@ -157,26 +158,66 @@
             border-radius: 50%;
             animation: typing 1.4s infinite ease-in-out;
         }
-    
+
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-    
+
         @keyframes typing {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
         }
-    
-        #clear-chat-btn {
-            padding: 8px 14px;
-            background: linear-gradient(135deg, var(--danger), #d50000);
+
+        /* ── Input area ── */
+        .input-area {
+            flex-shrink: 0;
+            padding: 12px 16px;
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+            background: linear-gradient(to right, rgba(20,5,40,0.95), rgba(40,10,60,0.95));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(195,0,255,0.12);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 13px 18px;
+            border: none;
+            border-radius: 30px;
+            background: var(--input-bg);
+            color: white;
+            font-size: 16px;
+            -webkit-appearance: none;
+        }
+
+        #user-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        #user-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(195,0,255,0.3);
+        }
+
+        #send-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
             color: white;
             border: none;
-            border-radius: 50px;
+            font-size: 20px;
             cursor: pointer;
-            font-size: 13.5px;
-            font-weight: 600;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-    
+
+        /* ── Voice note ── */
         .voice-note {
             display: flex;
             align-items: center;
@@ -189,7 +230,7 @@
             border-bottom-left-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-    
+
         .voice-play-btn {
             width: 38px;
             height: 38px;
@@ -204,22 +245,24 @@
             cursor: pointer;
             flex-shrink: 0;
         }
-    
+
+        /* ── Avatar modal ── */
         .avatar-modal {
             display: none;
             position: fixed;
             inset: 0;
             background: rgba(0,0,0,0.92);
             backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             z-index: 9999;
             align-items: center;
             justify-content: center;
         }
-    
+
         .avatar-modal.show {
             display: flex;
         }
-    
+
         .avatar-modal-content {
             max-width: 90vw;
             max-height: 90vh;
@@ -227,7 +270,7 @@
             box-shadow: 0 0 60px rgba(195,0,255,0.7);
             object-fit: contain;
         }
-    
+
         .avatar-modal-close {
             position: absolute;
             top: 30px;
@@ -235,74 +278,87 @@
             color: white;
             font-size: 60px;
             cursor: pointer;
-            transition: all 0.3s;
             text-shadow: 0 0 10px rgba(0,0,0,0.8);
         }
     </style>
 </head>
 <body>
-    <div class="chat-header">
-        <div class="chat-header-left">
-            <div class="avatar-container" onclick="openFullAvatar()">
-                <div class="avatar" style="background-image: url('/static/images/isabella.png');"></div>
+
+    <div id="app">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <div class="avatar-container" onclick="openFullAvatar()">
+                    <div class="avatar" style="background-image: url('/static/images/isabella.png');"></div>
+                </div>
+                <div class="contact-info">
+                    <h2>Isabella</h2>
+                </div>
             </div>
-            <div class="contact-info">
-                <h2>Isabella</h2>
+            <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages-container">
+            <div id="typing-indicator" class="typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <span>Isabella is typing...</span>
             </div>
         </div>
-        <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
+
+        <!-- Input -->
+        <div class="input-area">
+            <input id="user-input" type="text" placeholder="Message Isabella..." autocomplete="off" />
+            <button id="send-btn">➤</button>
+        </div>
     </div>
 
-    <!-- Full Avatar Modal -->
+    <!-- Avatar Modal (outside #app so it overlays everything) -->
     <div id="avatar-modal" class="avatar-modal">
         <span class="avatar-modal-close" onclick="closeFullAvatar()">×</span>
         <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png" alt="Isabella">
     </div>
 
-    <!-- Main chat area -->
-    <div id="messages-container">
-        <div id="typing-indicator" class="typing-indicator">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <span>Isabella is typing...</span>
-        </div>
-    </div>
-
-    <div class="input-area">
-        <input id="user-input" type="text" placeholder="Message Isabella..." autocomplete="off" autofocus />
-        <button id="send-btn">➤</button>
-    </div>
-
     <script>
-        // Main variables
+        // ── Resize #app to exact window.innerHeight (bypasses Safari chrome) ──
+        function sizeApp() {
+            document.getElementById('app').style.height = window.innerHeight + 'px';
+        }
+        sizeApp();
+        window.addEventListener('resize', sizeApp);
+
+        // ── Main variables ──
         const messagesContainer = document.getElementById('messages-container');
-        const typingIndicator = document.getElementById('typing-indicator');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-    
+
         let convoId = localStorage.getItem('convo_id');
         let messagesHistory = [];
         let userIdleTimeout = null;
         let isSending = false;
         const USER_IDLE_PAUSE = 8000;
-    
+
         if (!convoId) {
             convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('convo_id', convoId);
         }
-    
+
+        function getTypingIndicator() {
+            return document.getElementById('typing-indicator');
+        }
+
         function loadHistory() {
             try {
                 const saved = localStorage.getItem('messages_history');
                 messagesHistory = saved ? JSON.parse(saved) : [];
             } catch (e) {
-                console.warn('Failed to load history, starting fresh');
                 messagesHistory = [];
                 localStorage.removeItem('messages_history');
             }
         }
-    
+
         function saveHistory() {
             try {
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
@@ -310,45 +366,47 @@
                 console.error('Failed to save history:', e);
             }
         }
-    
+
+        function rebuildTypingIndicator() {
+            const existing = document.getElementById('typing-indicator');
+            if (existing) existing.remove();
+            const div = document.createElement('div');
+            div.id = 'typing-indicator';
+            div.className = 'typing-indicator';
+            div.innerHTML = `
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <span>Isabella is typing...</span>`;
+            messagesContainer.insertBefore(div, messagesContainer.firstChild);
+        }
+
         function initChat() {
             loadHistory();
             messagesContainer.innerHTML = '';
-    
-            // Re-add typing indicator after clearing innerHTML
-            const typingHTML = `
-                <div id="typing-indicator" class="typing-indicator">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <span>Isabella is typing...</span>
-                </div>`;
-            messagesContainer.insertAdjacentHTML('afterbegin', typingHTML);
-    
+            rebuildTypingIndicator();
             messagesHistory.forEach(msg => {
-                const type = msg.role === 'user' ? 'sent' : 'received';
-                addMessage(msg.content, type);
+                addMessage(msg.content, msg.role === 'user' ? 'sent' : 'received');
             });
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-    
+
         window.addEventListener('load', () => {
+            sizeApp();
             initChat();
             input.focus();
         });
-    
+
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
                 saveHistory();
-            } else if (document.visibilityState === 'visible') {
+            } else {
                 initChat();
             }
         });
-    
-        window.addEventListener('pagehide', () => {
-            saveHistory();
-        });
-    
+
+        window.addEventListener('pagehide', saveHistory);
+
         function clearConversation() {
             if (confirm("Clear this conversation?")) {
                 localStorage.removeItem('convo_id');
@@ -357,178 +415,136 @@
                 convoId = 'conv_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
                 localStorage.setItem('convo_id', convoId);
                 messagesContainer.innerHTML = '';
-    
-                // Re-add typing indicator after clear
-                const typingHTML = `
-                    <div id="typing-indicator" class="typing-indicator">
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
-                        <div class="typing-dot"></div>
-                        <span>Isabella is typing...</span>
-                    </div>`;
-                messagesContainer.insertAdjacentHTML('afterbegin', typingHTML);
+                rebuildTypingIndicator();
             }
         }
-    
+
         function addMessage(text, type) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-            msgDiv.textContent = text;
-            messagesContainer.appendChild(msgDiv);
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = text;
+            messagesContainer.appendChild(div);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-    
+
         function addVoiceNote(audioUrl) {
             const voiceDiv = document.createElement('div');
-            voiceDiv.className = 'voice-note message received';
+            voiceDiv.className = 'voice-note';
             voiceDiv.innerHTML = `
                 <button class="voice-play-btn">▶</button>
                 <div class="voice-waveform">
-                    <div class="voice-bar" style="height: 18px;"></div>
-                    <div class="voice-bar" style="height: 26px;"></div>
-                    <div class="voice-bar" style="height: 14px;"></div>
-                    <div class="voice-bar" style="height: 30px;"></div>
-                    <div class="voice-bar" style="height: 22px;"></div>
-                    <div class="voice-bar" style="height: 16px;"></div>
-                    <div class="voice-bar" style="height: 28px;"></div>
-                    <div class="voice-bar" style="height: 20px;"></div>
+                    <div class="voice-bar" style="height:18px"></div>
+                    <div class="voice-bar" style="height:26px"></div>
+                    <div class="voice-bar" style="height:14px"></div>
+                    <div class="voice-bar" style="height:30px"></div>
+                    <div class="voice-bar" style="height:22px"></div>
+                    <div class="voice-bar" style="height:16px"></div>
+                    <div class="voice-bar" style="height:28px"></div>
+                    <div class="voice-bar" style="height:20px"></div>
                 </div>
-                <div class="voice-duration">0:00</div>
-            `;
+                <div class="voice-duration">0:00</div>`;
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
             let isPlaying = false;
-    
-            audio.addEventListener('timeupdate', () => durationEl.textContent = formatTime(audio.currentTime));
-            audio.addEventListener('ended', () => {
-                isPlaying = false;
-                playBtn.textContent = '▶';
+            audio.addEventListener('timeupdate', () => {
+                const m = Math.floor(audio.currentTime / 60);
+                const s = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
+                durationEl.textContent = `${m}:${s}`;
             });
-    
+            audio.addEventListener('ended', () => { isPlaying = false; playBtn.textContent = '▶'; });
             playBtn.addEventListener('click', () => {
-                if (isPlaying) {
-                    audio.pause();
-                    playBtn.textContent = '▶';
-                } else {
-                    audio.play();
-                    playBtn.textContent = '❚❚';
-                }
+                if (isPlaying) { audio.pause(); playBtn.textContent = '▶'; }
+                else { audio.play(); playBtn.textContent = '❚❚'; }
                 isPlaying = !isPlaying;
             });
-    
             messagesContainer.appendChild(voiceDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-    
-        function formatTime(seconds) {
-            const min = Math.floor(seconds / 60);
-            const sec = Math.floor(seconds % 60);
-            return `${min}:${sec.toString().padStart(2, '0')}`;
-        }
-    
+
         async function sendMessage() {
             if (isSending) return;
             const msg = input.value.trim();
             if (!msg) return;
-    
             isSending = true;
             addMessage(msg, 'sent');
             messagesHistory.push({ role: 'user', content: msg });
             saveHistory();
             input.value = '';
-    
             if (userIdleTimeout) clearTimeout(userIdleTimeout);
-            userIdleTimeout = setTimeout(() => triggerBotReply(), USER_IDLE_PAUSE);
-    
+            userIdleTimeout = setTimeout(triggerBotReply, USER_IDLE_PAUSE);
             input.focus();
             setTimeout(() => isSending = false, 1500);
         }
-    
+
         async function triggerBotReply() {
             if (isSending) return;
             isSending = true;
-    
-            const indicator = document.getElementById('typing-indicator');
+            const indicator = getTypingIndicator();
             if (indicator) indicator.classList.add('visible');
-    
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ convo_id: convoId })
                 });
-    
                 const data = await res.json();
-    
-                if (!data.replies || data.replies.length === 0) {
-                    if (indicator) indicator.classList.remove('visible');
-                    isSending = false;
-                    return;
-                }
-    
+                if (!data.replies || data.replies.length === 0) return;
                 for (let i = 0; i < data.replies.length; i++) {
-                    const bubble = data.replies[i];
-                    const isLast = i === data.replies.length - 1;
-                    const delay = i === 0 ? 0 : 2800;
-    
-                    await new Promise(resolve => {
-                        setTimeout(() => {
-                            if (isLast && data.voice_note) {
-                                addVoiceNote(data.voice_note);
-                            } else {
-                                addMessage(bubble, 'received');
-                            }
-                            messagesHistory.push({ role: 'assistant', content: bubble });
-                            saveHistory();
-                            resolve();
-                        }, delay);
-                    });
+                    await new Promise(resolve => setTimeout(() => {
+                        const isLast = i === data.replies.length - 1;
+                        if (isLast && data.voice_note) addVoiceNote(data.voice_note);
+                        else addMessage(data.replies[i], 'received');
+                        messagesHistory.push({ role: 'assistant', content: data.replies[i] });
+                        saveHistory();
+                        resolve();
+                    }, i === 0 ? 0 : 2800));
                 }
             } catch (err) {
                 console.error('Reply error:', err);
             } finally {
-                if (indicator) indicator.classList.remove('visible');
+                const ind = getTypingIndicator();
+                if (ind) ind.classList.remove('visible');
                 isSending = false;
             }
         }
-    
+
         function handleSend(e) {
-            if (e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-            }
+            if (e) { e.preventDefault(); e.stopImmediatePropagation(); }
             sendMessage();
         }
-    
+
         sendBtn.addEventListener('click', handleSend);
         sendBtn.addEventListener('touchend', handleSend);
-    
         input.addEventListener('keypress', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend(e);
-            }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); }
         });
-    
+
+        // Scroll to bottom when keyboard opens
         input.addEventListener('focus', () => {
             setTimeout(() => {
+                sizeApp();
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 100);
+            }, 300);
         });
-    
+
+        window.addEventListener('resize', () => {
+            sizeApp();
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+
         function openFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.style.display = 'flex';
             setTimeout(() => modal.classList.add('show'), 10);
         }
-    
+
         function closeFullAvatar() {
             const modal = document.getElementById('avatar-modal');
             modal.classList.remove('show');
             setTimeout(() => modal.style.display = 'none', 300);
         }
-    
+
         window.onclick = function(event) {
             const modal = document.getElementById('avatar-modal');
             if (event.target === modal) closeFullAvatar();
