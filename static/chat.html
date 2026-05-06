@@ -333,7 +333,7 @@
             const messages = document.getElementById('messages-container');
             if (messages) {
                 messages.style.minHeight = 'auto';
-                void messages.offsetHeight; // force reflow
+                void messages.offsetHeight;
                 messages.style.minHeight = '';
             }
         }
@@ -388,9 +388,10 @@
     
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
-            // Auto-recover pending reply if last message was from user
+            // === AUTO RECOVER PENDING REPLY ===
             const lastMsg = messagesHistory[messagesHistory.length - 1];
             if (lastMsg && lastMsg.role === 'user') {
+                // Last message was from user and no reply yet → recover
                 setTimeout(() => {
                     triggerBotReply();
                 }, 1200);
@@ -404,7 +405,6 @@
             forceScrollFix();
         });
     
-        // Viewport & scroll fixes
         window.addEventListener('resize', () => {
             sizeApp();
             forceScrollFix();
@@ -415,11 +415,8 @@
         });
     
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                saveHistory();
-            } else {
-                initChat();
-            }
+            if (document.visibilityState === 'hidden') saveHistory();
+            else if (document.visibilityState === 'visible') initChat();
         });
     
         window.addEventListener('pagehide', saveHistory);
@@ -449,17 +446,17 @@
             voiceDiv.innerHTML = `
                 <button class="voice-play-btn">▶</button>
                 <div class="voice-waveform">
-                    <div class="voice-bar" style="height: 18px;"></div>
-                    <div class="voice-bar" style="height: 26px;"></div>
-                    <div class="voice-bar" style="height: 14px;"></div>
-                    <div class="voice-bar" style="height: 30px;"></div>
-                    <div class="voice-bar" style="height: 22px;"></div>
-                    <div class="voice-bar" style="height: 16px;"></div>
-                    <div class="voice-bar" style="height: 28px;"></div>
-                    <div class="voice-bar" style="height: 20px;"></div>
+                    <div class="voice-bar" style="height:18px"></div>
+                    <div class="voice-bar" style="height:26px"></div>
+                    <div class="voice-bar" style="height:14px"></div>
+                    <div class="voice-bar" style="height:30px"></div>
+                    <div class="voice-bar" style="height:22px"></div>
+                    <div class="voice-bar" style="height:16px"></div>
+                    <div class="voice-bar" style="height:28px"></div>
+                    <div class="voice-bar" style="height:20px"></div>
                 </div>
-                <div class="voice-duration">0:00</div>
-            `;
+                <div class="voice-duration">0:00</div>`;
+            
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
@@ -540,6 +537,7 @@
                     await new Promise(resolve => {
                         setTimeout(() => {
                             if (isLast && data.voice_note) {
+                                // Save voice note permanently
                                 messagesHistory.push({
                                     role: 'assistant',
                                     content: bubble,
@@ -581,7 +579,6 @@
             }
         });
     
-        // Keyboard helpers
         input.addEventListener('focus', () => {
             setTimeout(() => {
                 sizeApp();
