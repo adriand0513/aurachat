@@ -254,9 +254,8 @@ async def login_user(body: Dict[str, str] = Body(...)):
     if not email or not first_name or not last_name:
         raise HTTPException(400, "Email, first name, and last name are required")
 
-    # Create or update user
     create_or_get_user(email, first_name, last_name)
-
+    
     return {
         "success": True,
         "email": email,
@@ -310,10 +309,9 @@ async def send_message(body: Dict[str, str] = Body(...)):
     if not email or not message:
         raise HTTPException(400, "email and message required")
 
-    if is_rate_limited(email):   # Changed to use email
+    if is_rate_limited(email):
         raise HTTPException(429, "Slow down... let's not rush this 😏")
 
-    # Save user message
     save_message(email, {"role": "user", "content": message})
 
     return {"success": True}
@@ -325,14 +323,13 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     if not email:
         raise HTTPException(400, "email required")
 
-    # === BACKEND GUARD (using email) ===
+    # Backend Guard
     now = time.time()
     if now - last_reply_time[email] < REPLY_COOLDOWN_SECONDS:
-        logger.info(f"Duplicate reply blocked for user {email} (cooldown)")
+        logger.info(f"Duplicate reply blocked for user {email}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
     
     last_reply_time[email] = now
-    # =========================
 
     if is_rate_limited(email):
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
@@ -340,35 +337,30 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     log_prefix = f"User {email}"
     context = get_nyc_context()
 
-    # Get full history using user_email
+    # Get history using user_email
     history = get_history(email)
     if len(history) > 40:
         history = history[-40:]
 
-    # ── Silence Detector ─────────────────────────────────────
+    # Silence Detector
     time_gap_minutes = 0
     silence_note = ""
     if history:
         last_user_msg = None
         for msg in reversed(history):
-            if msg["role"] == "user":
+            if msg.get("role") == "user":
                 last_user_msg = msg
                 break
-        
         if last_user_msg and "timestamp" in last_user_msg:
             try:
                 last_time = datetime.fromisoformat(str(last_user_msg["timestamp"]).replace("Z", "+00:00"))
                 time_gap_minutes = int((datetime.now(ZoneInfo("UTC")) - last_time).total_seconds() / 60)
-                
                 if time_gap_minutes > 60:
-                    if time_gap_minutes < 1440:
-                        silence_note = "The user just came back after several hours. Respond naturally."
-                    else:
-                        silence_note = "The user just came back after more than a day. Greet warmly."
+                    silence_note = "The user just came back after some time. Respond naturally."
             except:
                 pass
 
-    # ── Memory + Relationship ────────────────────────────────────────
+    # Memory + Relationship
     relevant_facts = get_relevant_facts(email, limit=5)
     rel_level = get_relationship_level(email)
     pet_name = get_pet_name(email)
@@ -385,21 +377,15 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
 
     if memory_summary:
         system_prompt += f"\n\n{memory_summary}"
-   
     system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
     if pet_name:
         system_prompt += f" You sometimes call him '{pet_name}' naturally."
-    else:
-        system_prompt += " Avoid pet names unless he uses one first."
 
     if silence_note:
         system_prompt += f"\n\n{silence_note}"
 
     # History for LLM
-    if time_gap_minutes > 90:
-        recent_history = history[-14:]
-    else:
-        recent_history = history[-22:]
+    recent_history = history[-22:] if time_gap_minutes <= 90 else history[-14:]
 
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
@@ -430,42 +416,25 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
-    if has_emotion and random.random() < 0.375 and bubbles:   # Reduced rate
+    if has_emotion and random.random() < 0.375 and bubbles:
         try:
             voice_note = generate_voice_note(bubbles[-1])
         except Exception as e:
             logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
 
-    # Save messages with user_email
+    # Save messages
     for bubble in bubbles:
         save_message(email, {
-            "role": "assistant", 
+            "role": "assistant",
             "content": bubble,
-            "voice_note": voice_note if 'voice_note' in locals() and voice_note else None
+            "voice_note": voice_note
         })
 
-    # Occasional summarization & relationship update
     if len(history) % 12 == 0 and len(history) > 10:
         summarize_recent_chat(email)
 
     if has_emotion and random.random() < 0.35:
         update_relationship(email, delta=1)
-
-    # CSV log
-    if bubbles:
-        last_user = ""
-        if history:
-            for msg in reversed(history):
-                if msg["role"] == "user":
-                    last_user = msg["content"]
-                    break
-        log_to_csv(
-            convo_id=email,   # using email instead of convo_id
-            user_message=last_user,
-            isabella_reply=" | ".join(bubbles),
-            emotion=detect_emotion(" ".join(bubbles)),
-            voice_note=bool(voice_note)
-        )
 
     return {"replies": bubbles, "voice_note": voice_note}
 
