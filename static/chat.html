@@ -400,12 +400,15 @@
         let currentUser = null;
     
         function checkLogin() {
+            console.log("🔍 checkLogin() called");
             const saved = localStorage.getItem('aurorasparq_user');
             if (saved) {
                 currentUser = JSON.parse(saved);
+                console.log("✅ Returning user:", currentUser.email);
                 document.getElementById('login-modal').classList.remove('show');
                 initChat();
             } else {
+                console.log("👤 New user → Showing login modal");
                 document.getElementById('login-modal').classList.add('show');
             }
         }
@@ -423,7 +426,7 @@
             currentUser = { firstName, lastName, email };
             localStorage.setItem('aurorasparq_user', JSON.stringify(currentUser));
     
-            // Register user on backend
+            // Register on backend
             fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -440,7 +443,7 @@
     
         function logout() {
             if (confirm("Log out? This will clear your saved conversations.")) {
-                localStorage.removeItem('velora_user');
+                localStorage.removeItem('aurorasparq_user');
                 localStorage.removeItem('messages_history');
                 location.reload();
             }
@@ -463,7 +466,6 @@
                 messagesHistory = saved ? JSON.parse(saved) : [];
             } catch (e) {
                 messagesHistory = [];
-                localStorage.removeItem('messages_history');
             }
         }
     
@@ -499,22 +501,12 @@
         }
     
         window.addEventListener('load', () => {
+            console.log("🚀 Page fully loaded");
             sizeApp();
-            console.log("🚀 Page fully loaded - Running checkLogin()");
-            
-            // Force show modal for testing
-            const loginModal = document.getElementById('login-modal');
-            if (loginModal) {
-                console.log("✅ Login modal element found");
-                loginModal.classList.add('show');
-            } else {
-                console.error("❌ Login modal NOT found in DOM");
-            }
-        
             checkLogin();
             forceScrollFix();
         });
-            
+    
         window.addEventListener('resize', () => {
             sizeApp();
             forceScrollFix();
@@ -555,15 +547,13 @@
                     <div class="voice-bar" style="height:20px"></div>
                 </div>
                 <div class="voice-duration">0:00</div>`;
-            
+    
             const playBtn = voiceDiv.querySelector('.voice-play-btn');
             const durationEl = voiceDiv.querySelector('.voice-duration');
             const audio = new Audio(audioUrl);
             let isPlaying = false;
     
-            audio.addEventListener('timeupdate', () => {
-                durationEl.textContent = formatTime(audio.currentTime);
-            });
+            audio.addEventListener('timeupdate', () => durationEl.textContent = formatTime(audio.currentTime));
             audio.addEventListener('ended', () => {
                 isPlaying = false;
                 playBtn.textContent = '▶';
@@ -636,11 +626,7 @@
                     await new Promise(resolve => {
                         setTimeout(() => {
                             if (isLast && data.voice_note) {
-                                messagesHistory.push({
-                                    role: 'assistant',
-                                    content: bubble,
-                                    voice_note: data.voice_note
-                                });
+                                messagesHistory.push({ role: 'assistant', content: bubble, voice_note: data.voice_note });
                                 addVoiceNote(data.voice_note);
                             } else {
                                 addMessage(bubble, 'received');
