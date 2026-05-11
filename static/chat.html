@@ -500,11 +500,21 @@
     
         window.addEventListener('load', () => {
             sizeApp();
-            console.log("Page loaded - checking login...");   // Debug
+            console.log("🚀 Page fully loaded - Running checkLogin()");
+            
+            // Force show modal for testing
+            const loginModal = document.getElementById('login-modal');
+            if (loginModal) {
+                console.log("✅ Login modal element found");
+                loginModal.classList.add('show');
+            } else {
+                console.error("❌ Login modal NOT found in DOM");
+            }
+        
             checkLogin();
             forceScrollFix();
         });
-    
+            
         window.addEventListener('resize', () => {
             sizeApp();
             forceScrollFix();
