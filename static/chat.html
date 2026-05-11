@@ -284,21 +284,26 @@
         .login-modal {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.95);
+            background: rgba(0,0,0,0.97);
             display: none;
             align-items: center;
             justify-content: center;
-            z-index: 10000;
+            z-index: 99999 !important;   /* ← This is the key fix */
         }
         
-        .login-modal.show { display: flex; }
+        .login-modal.show { 
+            display: flex; 
+        }
+        
         .login-box {
-            background: #1a1f2e;
-            padding: 32px;
-            border-radius: 16px;
+            background: #1a0f2e;
+            padding: 40px 30px;
+            border-radius: 20px;
             width: 90%;
-            max-width: 380px;
+            max-width: 400px;
             text-align: center;
+            box-shadow: 0 0 50px rgba(195, 0, 255, 0.4);
+            z-index: 100000;
         }
         .login-box input {
             width: 100%;
@@ -495,6 +500,7 @@
     
         window.addEventListener('load', () => {
             sizeApp();
+            console.log("Page loaded - checking login...");   // Debug
             checkLogin();
             forceScrollFix();
         });
