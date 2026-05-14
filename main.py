@@ -1,4 +1,4 @@
-# main.py - Isabella Chatbot Server (Open, Anonymous, Render-Ready)
+# main.py - Isabella Chatbot Server
 import os
 import re
 import json
@@ -35,19 +35,16 @@ from postprocess import clean_reply
 from voice import generate_voice_note
 from analytics import router as analytics_router
 
-# NEW: Import memory system
+# NEW: Import from memory.py
 from memory import (
     get_history as get_memory_history,
     save_message as save_memory_message,
     get_relevant_facts,
     get_relationship_level,
-    summarize_recent_chat
-)
-
-from relationship import (
-    get_relationship_level, 
-    get_pet_name, 
-    update_relationship 
+    summarize_recent_chat,
+    create_or_get_user,          # ← Moved here as requested
+    get_pet_name,
+    update_relationship
 )
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
@@ -60,15 +57,11 @@ app = FastAPI(title="Isabella Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(analytics_router)
 
-
-from collections import defaultdict
-import time
-
 # ── Backend Anti-Duplicate Guard ─────────────────────────────────────
-last_reply_time = defaultdict(float)   # convo_id → timestamp of last reply
-REPLY_COOLDOWN_SECONDS = 6             # Adjust if needed (4-8 seconds is good)
+last_reply_time = defaultdict(float)
+REPLY_COOLDOWN_SECONDS = 6
 
-# ── Private CSV Logging (ONLY FOR YOUR USE) ─────────────────────────────────
+# ── Private CSV Logging ─────────────────────────────────────────────
 CSV_LOG_FILE = "isabella_private_logs.csv"
 
 def init_csv_log():
@@ -76,7 +69,8 @@ def init_csv_log():
         with open(CSV_LOG_FILE, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
-                "timestamp", "convo_id", "user_message", "isabella_reply", "emotion", "voice_note_generated"
+                "timestamp", "convo_id", "user_message", "isabella_reply", 
+                "emotion", "voice_note_generated"
             ])
         logger.info("Created private CSV log file")
 
@@ -97,7 +91,7 @@ def log_to_csv(convo_id: str, user_message: str, isabella_reply: str, emotion: s
     except Exception as e:
         logger.error(f"Failed to write to private CSV log: {e}")
 
-# ── SQLite Analytics Database ───────────────────────────────────────────────
+# ── SQLite Analytics Database ─────────────────────────────────────
 DB_PATH = "analytics.db"
 
 def init_db():
@@ -127,7 +121,7 @@ def init_db():
 
 init_db()
 
-# Emotion detection (unchanged)
+# ── Emotion detection ─────────────────────────────────────────────
 EMOTION_MAP = {
     "flirty": ["sexy", "horny", "kiss", "touch", "want you", "miss you"],
     "playful": ["lol", "haha", "tease", "funny"],
@@ -165,14 +159,14 @@ def log_message(convo_id: str, role: str, content: str):
     conn.commit()
     conn.close()
 
-# ── Anonymous Memory (now using memory.py) ─────────────────────────────────
+# ── Anonymous Memory Wrappers ─────────────────────────────────────
 def get_history(convo_id: str) -> List[Dict]:
     return get_memory_history(convo_id)
 
 def save_message(convo_id: str, message: Dict):
     save_memory_message(convo_id, message)
 
-# ── Rate limiting ───────────────────────────────────────────────────────────
+# ── Rate limiting ─────────────────────────────────────────────────
 convo_rate_limits = defaultdict(list)
 
 def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
@@ -181,7 +175,7 @@ def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
     convo_rate_limits[convo_id].append(now)
     return len(convo_rate_limits[convo_id]) > max_per_minute
 
-# ── NYC context ─────────────────────────────────────────────────────────────
+# ── NYC context ───────────────────────────────────────────────────
 def get_nyc_context() -> Dict[str, str]:
     nyc_tz = ZoneInfo("America/New_York")
     now_nyc = datetime.now(nyc_tz)
@@ -197,7 +191,7 @@ def get_nyc_context() -> Dict[str, str]:
         weather = "chilly evening"
     return {"time": time_str, "weather": weather}
 
-# ── Improved split_into_bubbles ─────────────────────────────────────────────
+# ── Reply splitting ───────────────────────────────────────────────
 def split_into_bubbles(text: str) -> List[str]:
     if not text.strip():
         return ["..."]
@@ -210,22 +204,7 @@ def split_into_bubbles(text: str) -> List[str]:
             sentence = sentence.strip()
             if not sentence:
                 continue
-            if current and random.random() < 0.45 and len(paragraphs) < 3:   # Increased chance
-                paragraphs.append(current.strip())
-                current = sentence
-            else:
-                if current:
-                    current += " " + sentence
-                else:
-                    current = sentence
-        if current:
-            paragraphs.append(current.strip())
-    if len(paragraphs) == 1 and len(paragraphs[0]) > 160:
-        sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
-        paragraphs = []
-        current = ""
-        for sentence in sentences:
-            if len(current) > 95 and len(paragraphs) < 3:
+            if current and random.random() < 0.45 and len(paragraphs) < 3:
                 paragraphs.append(current.strip())
                 current = sentence
             else:
@@ -235,7 +214,7 @@ def split_into_bubbles(text: str) -> List[str]:
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
     return paragraphs if paragraphs else [text.strip()]
 
-# ── Routes ──────────────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
     try:
@@ -244,7 +223,6 @@ async def home():
     except FileNotFoundError:
         return HTMLResponse("<h1>Error: home.html not found</h1>", status_code=500)
 
-# ── User Login & Management Routes ─────────────────────────────────────
 @app.post("/api/login")
 async def login_user(body: Dict[str, str] = Body(...)):
     email = body.get("email", "").strip().lower()
@@ -254,68 +232,17 @@ async def login_user(body: Dict[str, str] = Body(...)):
     if not email or not first_name or not last_name:
         raise HTTPException(400, "Email, first name, and last name are required")
 
-    create_or_get_user(email, first_name, last_name)
-    
-    return {
-        "success": True,
-        "email": email,
-        "first_name": first_name,
-        "last_name": last_name
-    }
-
-@app.get("/api/me")
-async def get_current_user(email: str):
-    """Simple endpoint to verify user and get basic info"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT first_name, last_name FROM users WHERE email = ?", (email,))
-    row = c.fetchone()
-    conn.close()
-
-    if not row:
-        raise HTTPException(404, "User not found")
-
-    return {
-        "email": email,
-        "first_name": row[0],
-        "last_name": row[1]
-    }
-
-@app.get("/chat")
-async def chat_page():
     try:
-        with open("static/chat.html", "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        response = HTMLResponse(content)
-        
-        # FORCE FRESH LOAD - No more caching issues
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        
-        # Extra safety for Safari
-        response.headers["Surrogate-Control"] = "no-store"
-        
-        return response
-    except FileNotFoundError:
-        return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
-
-@app.post("/api/send")
-async def send_message(body: Dict[str, str] = Body(...)):
-    email = body.get("email", "").strip().lower()
-    message = body.get("message", "").strip()
-
-    if not email or not message:
-        raise HTTPException(400, "email and message required")
-
-    if is_rate_limited(email):
-        raise HTTPException(429, "Slow down... let's not rush this 😏")
-
-    save_message(email, {"role": "user", "content": message})
-
-    return {"success": True}
-
+        create_or_get_user(email, first_name, last_name)   # Now imported from memory.py
+        return {
+            "success": True,
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name
+        }
+    except Exception as e:
+        logger.error(f"Login error for {email}: {e}")
+        raise HTTPException(500, "Failed to create user profile")
 
 @app.post("/api/reply")
 async def generate_reply(body: Dict[str, str] = Body(...)):
@@ -326,31 +253,21 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     # Backend Guard
     now = time.time()
     if now - last_reply_time[email] < REPLY_COOLDOWN_SECONDS:
-        logger.info(f"Duplicate reply blocked for user {email}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
-    
-    last_reply_time[email] = now
 
+    last_reply_time[email] = now
     if is_rate_limited(email):
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
-    log_prefix = f"User {email}"
     context = get_nyc_context()
-
-    # Get history using user_email
     history = get_history(email)
     if len(history) > 40:
         history = history[-40:]
 
     # Silence Detector
-    time_gap_minutes = 0
     silence_note = ""
     if history:
-        last_user_msg = None
-        for msg in reversed(history):
-            if msg.get("role") == "user":
-                last_user_msg = msg
-                break
+        last_user_msg = next((msg for msg in reversed(history) if msg.get("role") == "user"), None)
         if last_user_msg and "timestamp" in last_user_msg:
             try:
                 last_time = datetime.fromisoformat(str(last_user_msg["timestamp"]).replace("Z", "+00:00"))
@@ -364,9 +281,8 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     relevant_facts = get_relevant_facts(email, limit=5)
     rel_level = get_relationship_level(email)
     pet_name = get_pet_name(email)
-
     memory_summary = ""
-    if relevant_facts and time_gap_minutes < 180:
+    if relevant_facts and "time_gap_minutes" in locals() and time_gap_minutes < 180:
         memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:4])
 
     system_prompt = get_system_prompt(
@@ -374,22 +290,18 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         current_time=context["time"],
         weather=context["weather"]
     )
-
     if memory_summary:
         system_prompt += f"\n\n{memory_summary}"
     system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
     if pet_name:
         system_prompt += f" You sometimes call him '{pet_name}' naturally."
-
     if silence_note:
         system_prompt += f"\n\n{silence_note}"
 
-    # History for LLM
-    recent_history = history[-22:] if time_gap_minutes <= 90 else history[-14:]
-
+    recent_history = history[-22:] if "time_gap_minutes" in locals() and time_gap_minutes <= 90 else history[-14:]
     messages = [{"role": "system", "content": system_prompt}] + recent_history
 
-    # Call Grok
+    # Call Grok (xAI)
     headers = {
         "Authorization": f"Bearer {XAI_API_KEY}",
         "Content-Type": "application/json"
@@ -406,21 +318,21 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         resp.raise_for_status()
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
+        logger.error(f"XAI API failure for {email}: {e}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
     reply = clean_reply(raw_reply)
     bubbles = split_into_bubbles(reply)
 
     voice_note = ""
-    emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
+    emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream"]
     has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
 
     if has_emotion and random.random() < 0.375 and bubbles:
         try:
             voice_note = generate_voice_note(bubbles[-1])
         except Exception as e:
-            logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
+            logger.error(f"ElevenLabs failure: {e}")
 
     # Save messages
     for bubble in bubbles:
@@ -432,7 +344,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
 
     if len(history) % 12 == 0 and len(history) > 10:
         summarize_recent_chat(email)
-
     if has_emotion and random.random() < 0.35:
         update_relationship(email, delta=1)
 
