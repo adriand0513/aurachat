@@ -1,4 +1,4 @@
-# memory.py - Long-term Memory & Relationship System with Natural Name Support
+# memory.py - Long-term Memory & Relationship System
 import sqlite3
 import os
 from datetime import datetime
@@ -7,23 +7,11 @@ from typing import List, Dict, Optional
 DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
 
 def init_db():
-    """Initialize database with safe migrations."""
+    """Initialize and safely migrate database."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Users table (for full login if needed later)
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            first_name TEXT,
-            last_name TEXT,
-            preferred_name TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_active DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    # Chat history
+    # Chat history table
     c.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +35,7 @@ def init_db():
         )
     ''')
 
-    # Relationship state
+    # Relationship
     c.execute('''
         CREATE TABLE IF NOT EXISTS relationship_state (
             user_id TEXT PRIMARY KEY,
@@ -58,22 +46,26 @@ def init_db():
         )
     ''')
 
-    # Safe migrations
+    # Users (for name storage)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            preferred_name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_active DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # === SAFE MIGRATIONS ===
+    try:
+        c.execute("ALTER TABLE chat_history ADD COLUMN voice_note TEXT")
+        print("✅ Migration: Added voice_note column")
+    except sqlite3.OperationalError:
+        pass
+
     try:
         c.execute("ALTER TABLE chat_history ADD COLUMN user_id TEXT")
-        print("✅ Migration: Added user_id to chat_history")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        c.execute("ALTER TABLE key_facts ADD COLUMN user_id TEXT")
-        print("✅ Migration: Added user_id to key_facts")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        c.execute("ALTER TABLE relationship_state ADD COLUMN user_id TEXT")
-        print("✅ Migration: Added user_id to relationship_state")
+        print("✅ Migration: Added user_id column")
     except sqlite3.OperationalError:
         pass
 
@@ -83,12 +75,11 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print(f"✅ Memory system initialized successfully → {DB_PATH}")
+    print(f"✅ Memory system initialized → {DB_PATH}")
 
 
-# ── User Name Management (Natural Name System) ─────────────────────────────
+# ── Name Management ─────────────────────────────────────────────────────
 def save_user_name(user_id: str, name: str):
-    """Save the user's preferred name"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -103,16 +94,15 @@ def save_user_name(user_id: str, name: str):
 
 
 def get_user_name(user_id: str) -> Optional[str]:
-    """Get the user's saved name"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT preferred_name FROM users WHERE user_id = ?", (user_id,))
     row = c.fetchone()
     conn.close()
-    return row[0] if row and row[0] else None
+    return row[0] if row else None
 
 
-# ── Chat History ───────────────────────────────────────────────────────────
+# ── History ─────────────────────────────────────────────────────────────
 def get_history(user_id: str, limit: int = 50) -> List[Dict]:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -139,7 +129,7 @@ def save_message(user_id: str, message: Dict):
     conn.close()
 
 
-# ── Key Facts ──────────────────────────────────────────────────────────────
+# ── Other functions (Key Facts, Relationship) ───────────────────────────
 def add_key_fact(user_id: str, fact: str, importance: int = 7):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -165,7 +155,6 @@ def get_relevant_facts(user_id: str, limit: int = 8) -> List[str]:
     return facts
 
 
-# ── Relationship ───────────────────────────────────────────────────────────
 def get_relationship_level(user_id: str) -> int:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -204,7 +193,7 @@ def update_relationship(user_id: str, delta: int = 1, pet_name: Optional[str] = 
 
 
 def summarize_recent_chat(user_id: str):
-    pass  # Can be expanded later
+    pass
 
 
 # Initialize
