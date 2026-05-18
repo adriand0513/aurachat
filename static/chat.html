@@ -427,28 +427,31 @@
         async function triggerBotReply() {
             if (isSending) return;
             isSending = true;
-            typingIndicator.classList.add('visible');
-    
+        
+            // Safe check for typing indicator
+            const typing = document.getElementById('typing-indicator');
+            if (typing) typing.classList.add('visible');
+        
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ user_id: userId })
                 });
-    
+        
                 const data = await res.json();
-    
+        
                 if (!data.replies || data.replies.length === 0) {
-                    typingIndicator.classList.remove('visible');
+                    if (typing) typing.classList.remove('visible');
                     isSending = false;
                     return;
                 }
-    
+        
                 for (let i = 0; i < data.replies.length; i++) {
                     const bubble = data.replies[i];
                     const isLast = i === data.replies.length - 1;
                     const delay = i === 0 ? 0 : 2800;
-    
+        
                     await new Promise(resolve => {
                         setTimeout(() => {
                             if (isLast && data.voice_note) {
@@ -466,7 +469,7 @@
             } catch (err) {
                 console.error('Reply error:', err);
             } finally {
-                typingIndicator.classList.remove('visible');
+                if (typing) typing.classList.remove('visible');
                 isSending = false;
             }
         }
