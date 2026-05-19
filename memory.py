@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
 
 def init_db():
-    """Initialize database with safe migrations."""
+    """Initialize and safely migrate database with user support."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
@@ -22,11 +22,12 @@ def init_db():
         )
     ''')
 
-    # Chat history table
+    # Chat history linked to user
     c.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_email TEXT,
+            convo_id TEXT,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             voice_note TEXT,
@@ -34,7 +35,7 @@ def init_db():
         )
     ''')
 
-    # Key facts table
+    # Key facts per user
     c.execute('''
         CREATE TABLE IF NOT EXISTS key_facts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,11 +43,11 @@ def init_db():
             fact TEXT NOT NULL,
             importance INTEGER DEFAULT 5,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_recalled DATETIME DEFAULT CURRENT_TIMESTAMP
+            last_recalled DATETIME
         )
     ''')
 
-    # Relationship table
+    # Relationship state per user
     c.execute('''
         CREATE TABLE IF NOT EXISTS relationship_state (
             user_email TEXT PRIMARY KEY,
@@ -57,38 +58,43 @@ def init_db():
         )
     ''')
 
-    # === SAFE MIGRATIONS ===
-    # Add user_email column if it doesn't exist
+    # Safe migrations for existing databases
     try:
         c.execute("ALTER TABLE chat_history ADD COLUMN user_email TEXT")
-        print("✅ Migration: Added user_email to chat_history")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
-    try:
-        c.execute("ALTER TABLE key_facts ADD COLUMN user_email TEXT")
-        print("✅ Migration: Added user_email to key_facts")
+        print("Migrated: Added user_email to chat_history")
     except sqlite3.OperationalError:
         pass
 
-    # Create indexes (only after column is guaranteed to exist)
+    try:
+        c.execute("ALTER TABLE key_facts ADD COLUMN user_email TEXT")
+        print("Migrated: Added user_email to key_facts")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        c.execute("ALTER TABLE relationship_state ADD COLUMN user_email TEXT")
+        print("Migrated: Added user_email to relationship_state")
+    except sqlite3.OperationalError:
+        pass
+
+    # Indexes for performance
     c.execute('CREATE INDEX IF NOT EXISTS idx_history_user ON chat_history (user_email)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_facts_user ON key_facts (user_email)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_history_time ON chat_history (timestamp)')
 
     conn.commit()
     conn.close()
-    print(f"✅ Memory system initialized successfully → {DB_PATH}")
+    print(f"Memory system initialized and migrated successfully. DB: {DB_PATH}")
 
 
 # ── User Management ─────────────────────────────────────────────────────
 def create_or_get_user(email: str, first_name: str, last_name: str):
+    """Create or update user."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         INSERT INTO users (email, first_name, last_name, last_active)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(email) DO UPDATE SET
+        ON CONFLICT(email) DO UPDATE SET 
             last_active = CURRENT_TIMESTAMP,
             first_name = COALESCE(?, first_name),
             last_name = COALESCE(?, last_name)
@@ -97,7 +103,7 @@ def create_or_get_user(email: str, first_name: str, last_name: str):
     conn.close()
 
 
-# ── Chat History ────────────────────────────────────────────────────────
+# ── History Functions ───────────────────────────────────────────────────
 def get_history(user_email: str, limit: int = 50) -> List[Dict]:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -117,9 +123,10 @@ def save_message(user_email: str, message: Dict):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO chat_history (user_email, role, content, voice_note)
-        VALUES (?, ?, ?, ?)
-    ''', (user_email, message["role"], message["content"], message.get("voice_note")))
+        INSERT INTO chat_history (user_email, convo_id, role, content, voice_note)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (user_email, message.get("convo_id", "default"), 
+          message["role"], message["content"], message.get("voice_note")))
     conn.commit()
     conn.close()
 
@@ -140,9 +147,9 @@ def get_relevant_facts(user_email: str, limit: int = 8) -> List[str]:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
-        SELECT fact FROM key_facts
+        SELECT fact FROM key_facts 
         WHERE user_email = ?
-        ORDER BY importance DESC, last_recalled DESC
+        ORDER BY importance DESC, last_recalled DESC 
         LIMIT ?
     ''', (user_email, limit))
     facts = [row[0] for row in c.fetchall()]
@@ -174,7 +181,7 @@ def update_relationship(user_email: str, delta: int = 1, pet_name: Optional[str]
     c = conn.cursor()
     current = get_relationship_level(user_email)
     new_level = max(1, min(10, current + delta))
-
+    
     c.execute('''
         INSERT INTO relationship_state (user_email, level, pet_name, notes, last_interaction)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -183,13 +190,18 @@ def update_relationship(user_email: str, delta: int = 1, pet_name: Optional[str]
             level = ?,
             pet_name = COALESCE(?, pet_name),
             notes = COALESCE(notes || '\n' || ?, notes)
-    ''', (user_email, new_level, pet_name, note, new_level, pet_name, note))
+    ''', (user_email, new_level, pet_name, note))
     conn.commit()
     conn.close()
 
 
 def summarize_recent_chat(user_email: str):
-    pass  # Future use
+    """Light summarizer for long-term memory."""
+    history = get_history(user_email, limit=30)
+    if len(history) < 8:
+        return
+    # Add your summarization logic here if needed
+    pass
 
 
 # Initialize on import
