@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Aurora Sparq</title>
@@ -18,11 +15,13 @@
             --text-muted: #bb99cc;
             --input-bg: rgba(50, 20, 80, 0.6);
         }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
+
         html, body {
             width: 100%;
             height: 100%;
@@ -32,6 +31,8 @@
             touch-action: manipulation;
             overflow: hidden;
         }
+
+        /* ── Single wrapper that JS sizes to exact window.innerHeight ── */
         #app {
             position: fixed;
             top: 0;
@@ -41,6 +42,7 @@
             display: flex;
             flex-direction: column;
         }
+
         /* ── Header ── */
         .chat-header {
             flex-shrink: 0;
@@ -54,14 +56,17 @@
             justify-content: space-between;
             z-index: 10;
         }
+
         .chat-header-left {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
         .avatar-container {
             cursor: pointer;
         }
+
         .avatar {
             width: 42px;
             height: 42px;
@@ -70,10 +75,12 @@
             background-position: center;
             border: 2px solid var(--accent-purple);
         }
+
         .contact-info h2 {
             font-size: 17px;
             font-weight: 600;
         }
+
         #clear-chat-btn {
             padding: 8px 14px;
             background: linear-gradient(135deg, var(--danger), #d50000);
@@ -84,6 +91,7 @@
             font-size: 13.5px;
             font-weight: 600;
         }
+
         /* ── Messages ── */
         #messages-container {
             flex: 1 1 0;
@@ -97,6 +105,7 @@
             scroll-behavior: smooth;
             overscroll-behavior: contain;
         }
+
         .message {
             max-width: 80%;
             padding: 12px 16px;
@@ -105,18 +114,21 @@
             line-height: 1.45;
             word-wrap: break-word;
         }
+
         .sent {
             background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
             color: white;
             align-self: flex-end;
             border-bottom-right-radius: 6px;
         }
+
         .received {
             background: rgba(30,20,50,0.9);
             color: white;
             align-self: flex-start;
             border-bottom-left-radius: 6px;
         }
+
         /* ── Typing indicator ── */
         .typing-indicator {
             display: flex;
@@ -133,10 +145,12 @@
             opacity: 0;
             transition: opacity 0.3s ease;
         }
+
         .typing-indicator.visible {
             visibility: visible;
             opacity: 1;
         }
+
         .typing-dot {
             width: 8px;
             height: 8px;
@@ -144,12 +158,15 @@
             border-radius: 50%;
             animation: typing 1.4s infinite ease-in-out;
         }
+
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
         @keyframes typing {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
         }
+
         /* ── Input area ── */
         .input-area {
             flex-shrink: 0;
@@ -164,6 +181,7 @@
             gap: 12px;
             z-index: 10;
         }
+
         #user-input {
             flex: 1;
             padding: 13px 18px;
@@ -174,13 +192,16 @@
             font-size: 16px;
             -webkit-appearance: none;
         }
+
         #user-input::placeholder {
             color: var(--text-muted);
         }
+
         #user-input:focus {
             outline: none;
             box-shadow: 0 0 0 3px rgba(195,0,255,0.3);
         }
+
         #send-btn {
             width: 46px;
             height: 46px;
@@ -195,6 +216,7 @@
             align-items: center;
             justify-content: center;
         }
+
         /* ── Voice note ── */
         .voice-note {
             display: flex;
@@ -208,6 +230,7 @@
             border-bottom-left-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
+
         .voice-play-btn {
             width: 38px;
             height: 38px;
@@ -222,6 +245,7 @@
             cursor: pointer;
             flex-shrink: 0;
         }
+
         /* ── Avatar modal ── */
         .avatar-modal {
             display: none;
@@ -234,9 +258,11 @@
             align-items: center;
             justify-content: center;
         }
+
         .avatar-modal.show {
             display: flex;
         }
+
         .avatar-modal-content {
             max-width: 90vw;
             max-height: 90vh;
@@ -244,6 +270,7 @@
             box-shadow: 0 0 60px rgba(195,0,255,0.7);
             object-fit: contain;
         }
+
         .avatar-modal-close {
             position: absolute;
             top: 30px;
@@ -253,42 +280,106 @@
             cursor: pointer;
             text-shadow: 0 0 10px rgba(0,0,0,0.8);
         }
+
+        .login-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.97);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999 !important;   /* ← This is the key fix */
+        }
+        
+        .login-modal.show { 
+            display: flex; 
+        }
+        
+        .login-box {
+            background: #1a0f2e;
+            padding: 40px 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(195, 0, 255, 0.4);
+            z-index: 100000;
+        }
+        .login-box input {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            background: #0f1225;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #c300ff, #ff0099);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-top: 16px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="login-modal">
+        <div class="login-box">
+            <h2>Welcome to Aurora Sparq</h2>
+            <p>Enter your details to start chatting</p>
+            <input type="text" id="first-name" placeholder="First Name" />
+            <input type="text" id="last-name" placeholder="Last Name" />
+            <input type="email" id="email" placeholder="Email Address" />
+            <button class="login-btn" onclick="handleLogin()">Start Chatting</button>
+        </div>
+    </div>
+
     <div id="app">
+        <!-- Header -->
         <div class="chat-header">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <div class="avatar" style="background-image: url('/static/images/isabella.png');" onclick="openFullAvatar()"></div>
-                <h2>Isabella</h2>
+            <div class="chat-header-left">
+                <div class="avatar-container" onclick="openFullAvatar()">
+                    <div class="avatar" style="background-image: url('/static/images/isabella.png');"></div>
+                </div>
+                <div class="contact-info">
+                    <h2>Isabella</h2>
+                </div>
             </div>
-            <button onclick="clearConversation()">Clear Chat</button>
+            <button id="clear-chat-btn" onclick="clearConversation()">Clear Chat</button>
         </div>
 
-        <div id="messages-container"></div>
+        <!-- Messages -->
+        <div id="messages-container">
+            <div id="typing-indicator" class="typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <span>Isabella is typing...</span>
+            </div>
+        </div>
 
+        <!-- Input -->
         <div class="input-area">
             <input id="user-input" type="text" placeholder="Message Isabella..." autocomplete="off" />
             <button id="send-btn">➤</button>
         </div>
     </div>
 
-    <!-- Avatar Modal -->
-    <div id="avatar-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:9999; align-items:center; justify-content:center;">
-        <span onclick="closeFullAvatar()" style="position:absolute; top:30px; right:40px; color:white; font-size:60px; cursor:pointer;">×</span>
-        <img id="full-avatar" src="/static/images/isabella.png" style="max-width:90vw; max-height:90vh; border-radius:16px;">
+    <!-- Avatar Modal (outside #app so it overlays everything) -->
+    <div id="avatar-modal" class="avatar-modal">
+        <span class="avatar-modal-close" onclick="closeFullAvatar()">×</span>
+        <img class="avatar-modal-content" id="full-avatar" src="/static/images/isabella.png" alt="Isabella">
     </div>
 
-   <script>
-        // === AGGRESSIVE CACHE BUSTING ===
-        if (!window.location.search.includes('v=')) {
-            window.location.replace(window.location.pathname + '?v=' + Date.now());
-        }
-    
-        // === NATURAL NAME SYSTEM ===
-        let userId = localStorage.getItem('user_id') || 'user_' + Math.random().toString(36).substr(2, 9);
-        if (!localStorage.getItem('user_id')) localStorage.setItem('user_id', userId);
-    
+    <script>
         // === SAFARI VIEWPORT + SCROLL FIX ===
         function sizeApp() {
             const h = window.innerHeight;
@@ -302,6 +393,59 @@
                 messages.style.minHeight = 'auto';
                 void messages.offsetHeight;
                 messages.style.minHeight = '';
+            }
+        }
+    
+        // === USER LOGIN SYSTEM ===
+        let currentUser = null;
+    
+        function checkLogin() {
+            console.log("🔍 checkLogin() called");
+            const saved = localStorage.getItem('aurorasparq_user');
+            if (saved) {
+                currentUser = JSON.parse(saved);
+                console.log("✅ Returning user:", currentUser.email);
+                document.getElementById('login-modal').classList.remove('show');
+                initChat();
+            } else {
+                console.log("👤 New user → Showing login modal");
+                document.getElementById('login-modal').classList.add('show');
+            }
+        }
+    
+        function handleLogin() {
+            const firstName = document.getElementById('first-name').value.trim();
+            const lastName = document.getElementById('last-name').value.trim();
+            const email = document.getElementById('email').value.trim().toLowerCase();
+    
+            if (!firstName || !lastName || !email) {
+                alert("Please fill in all fields");
+                return;
+            }
+    
+            currentUser = { firstName, lastName, email };
+            localStorage.setItem('aurorasparq_user', JSON.stringify(currentUser));
+    
+            // Register on backend
+            fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    first_name: firstName, 
+                    last_name: lastName, 
+                    email: email 
+                })
+            }).catch(err => console.error("Login error:", err));
+    
+            document.getElementById('login-modal').classList.remove('show');
+            initChat();
+        }
+    
+        function logout() {
+            if (confirm("Log out? This will clear your saved conversations.")) {
+                localStorage.removeItem('aurorasparq_user');
+                localStorage.removeItem('messages_history');
+                location.reload();
             }
         }
     
@@ -328,10 +472,13 @@
         function saveHistory() {
             try {
                 localStorage.setItem('messages_history', JSON.stringify(messagesHistory));
-            } catch (e) {}
+            } catch (e) {
+                console.error('Failed to save history:', e);
+            }
         }
     
         function initChat() {
+            if (!currentUser) return;
             loadHistory();
             messagesContainer.innerHTML = '';
     
@@ -345,7 +492,36 @@
             });
     
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+            // Auto-recover pending reply
+            const lastMsg = messagesHistory[messagesHistory.length - 1];
+            if (lastMsg && lastMsg.role === 'user') {
+                setTimeout(() => triggerBotReply(), 800);
+            }
         }
+    
+        window.addEventListener('load', () => {
+            console.log("🚀 Page fully loaded");
+            sizeApp();
+            checkLogin();
+            forceScrollFix();
+        });
+    
+        window.addEventListener('resize', () => {
+            sizeApp();
+            forceScrollFix();
+        });
+        window.addEventListener('orientationchange', () => {
+            sizeApp();
+            forceScrollFix();
+        });
+    
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') saveHistory();
+            else if (document.visibilityState === 'visible' && currentUser) initChat();
+        });
+    
+        window.addEventListener('pagehide', saveHistory);
     
         function addMessage(text, type) {
             const div = document.createElement('div');
@@ -377,9 +553,7 @@
             const audio = new Audio(audioUrl);
             let isPlaying = false;
     
-            audio.addEventListener('timeupdate', () => {
-                durationEl.textContent = formatTime(audio.currentTime);
-            });
+            audio.addEventListener('timeupdate', () => durationEl.textContent = formatTime(audio.currentTime));
             audio.addEventListener('ended', () => {
                 isPlaying = false;
                 playBtn.textContent = '▶';
@@ -407,7 +581,7 @@
         }
     
         async function sendMessage() {
-            if (isSending) return;
+            if (!currentUser || isSending) return;
             const msg = input.value.trim();
             if (!msg) return;
     
@@ -425,33 +599,30 @@
         }
     
         async function triggerBotReply() {
-            if (isSending) return;
+            if (!currentUser || isSending) return;
             isSending = true;
-        
-            // Safe check for typing indicator
-            const typing = document.getElementById('typing-indicator');
-            if (typing) typing.classList.add('visible');
-        
+            typingIndicator.classList.add('visible');
+    
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId })
+                    body: JSON.stringify({ email: currentUser.email })
                 });
-        
+    
                 const data = await res.json();
-        
+    
                 if (!data.replies || data.replies.length === 0) {
-                    if (typing) typing.classList.remove('visible');
+                    typingIndicator.classList.remove('visible');
                     isSending = false;
                     return;
                 }
-        
+    
                 for (let i = 0; i < data.replies.length; i++) {
                     const bubble = data.replies[i];
                     const isLast = i === data.replies.length - 1;
                     const delay = i === 0 ? 0 : 2800;
-        
+    
                     await new Promise(resolve => {
                         setTimeout(() => {
                             if (isLast && data.voice_note) {
@@ -469,7 +640,7 @@
             } catch (err) {
                 console.error('Reply error:', err);
             } finally {
-                if (typing) typing.classList.remove('visible');
+                typingIndicator.classList.remove('visible');
                 isSending = false;
             }
         }
@@ -482,7 +653,6 @@
             sendMessage();
         }
     
-        // Event Listeners
         sendBtn.addEventListener('click', handleSend);
         sendBtn.addEventListener('touchend', handleSend);
     
@@ -500,15 +670,9 @@
             }, 300);
         });
     
-        window.addEventListener('load', () => {
-            sizeApp();
-            initChat();
-            forceScrollFix();
-        });
-    
         window.addEventListener('resize', () => {
             sizeApp();
-            forceScrollFix();
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         });
     
         function openFullAvatar() {
@@ -527,14 +691,6 @@
             const modal = document.getElementById('avatar-modal');
             if (event.target === modal) closeFullAvatar();
         };
-    
-        function clearConversation() {
-            if (confirm("Clear this conversation?")) {
-                localStorage.removeItem('messages_history');
-                messagesHistory = [];
-                messagesContainer.innerHTML = '';
-            }
-        }
     </script>
 </body>
 </html>
