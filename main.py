@@ -1,70 +1,191 @@
-# main.py - Aurora Sparq (Natural Name System)
+# main.py - Isabella Chatbot Server (Open, Anonymous, Render-Ready)
 import os
 import re
+import json
 import random
 import time
 import logging
 import csv
+import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import requests
+from dotenv import load_dotenv
 from typing import Dict, List
 from collections import defaultdict
-
 from fastapi import FastAPI, HTTPException, Body
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-# Logging
-logging.basicConfig(level=logging.INFO)
+# Logging setup
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Aurora Sparq")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+load_dotenv()
 
-# Import memory
-from memory import (
-    get_history,
-    save_message,
-    get_relevant_facts,
-    get_relationship_level,
-    get_pet_name,
-    update_relationship,
-    summarize_recent_chat,
-    save_user_name,
-    get_user_name
-)
-
-# Config
+# ── Config imports ───────────────────────────────────────────────────────────
 from config import (
+    ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID,
     XAI_API_KEY, XAI_API_BASE, XAI_MODEL,
-    XAI_TEMPERATURE, XAI_MAX_TOKENS,
-    ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
+    XAI_TEMPERATURE, XAI_MAX_TOKENS
 )
-
 from prompt import get_system_prompt
 from postprocess import clean_reply
 from voice import generate_voice_note
+from analytics import router as analytics_router
 
-# ── Guards ───────────────────────────────────────────────────────────────
-last_reply_time = defaultdict(float)
-REPLY_COOLDOWN_SECONDS = 6
+# NEW: Import memory system
+from memory import (
+    get_history as get_memory_history,
+    save_message as save_memory_message,
+    get_relevant_facts,
+    get_relationship_level,
+    summarize_recent_chat
+)
 
+from relationship import (
+    get_relationship_level, 
+    get_pet_name, 
+    update_relationship 
+)
+
+logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
+logger.info(f" Model: {XAI_MODEL}")
+logger.info(f" Temperature: {XAI_TEMPERATURE}")
+logger.info(f" Max tokens: {XAI_MAX_TOKENS}")
+logger.info("---")
+
+app = FastAPI(title="Isabella Chatbot")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.include_router(analytics_router)
+
+
+from collections import defaultdict
+import time
+
+# ── Backend Anti-Duplicate Guard ─────────────────────────────────────
+last_reply_time = defaultdict(float)   # convo_id → timestamp of last reply
+REPLY_COOLDOWN_SECONDS = 6             # Adjust if needed (4-8 seconds is good)
+
+# ── Private CSV Logging (ONLY FOR YOUR USE) ─────────────────────────────────
+CSV_LOG_FILE = "isabella_private_logs.csv"
+
+def init_csv_log():
+    if not os.path.exists(CSV_LOG_FILE):
+        with open(CSV_LOG_FILE, mode='w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "timestamp", "convo_id", "user_message", "isabella_reply", "emotion", "voice_note_generated"
+            ])
+        logger.info("Created private CSV log file")
+
+init_csv_log()
+
+def log_to_csv(convo_id: str, user_message: str, isabella_reply: str, emotion: str, voice_note: bool):
+    try:
+        with open(CSV_LOG_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                convo_id,
+                user_message[:500],
+                isabella_reply[:1000],
+                emotion,
+                "Yes" if voice_note else "No"
+            ])
+    except Exception as e:
+        logger.error(f"Failed to write to private CSV log: {e}")
+
+# ── SQLite Analytics Database ───────────────────────────────────────────────
+DB_PATH = "analytics.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS conversations (
+                    convo_id TEXT PRIMARY KEY,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    message_count INTEGER DEFAULT 0
+                )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    convo_id TEXT,
+                    role TEXT,
+                    content TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    emotion TEXT DEFAULT 'neutral'
+                )''')
+    try:
+        c.execute("ALTER TABLE messages ADD COLUMN emotion TEXT DEFAULT 'neutral'")
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
+    conn.close()
+    logger.info("Analytics database initialized successfully")
+
+init_db()
+
+# Emotion detection (unchanged)
+EMOTION_MAP = {
+    "flirty": ["sexy", "horny", "kiss", "touch", "want you", "miss you"],
+    "playful": ["lol", "haha", "tease", "funny"],
+    "warm": ["sweet", "cute", "smile", "happy"],
+    "seductive": ["body", "curves", "crave", "feel"],
+    "teasing": ["trouble", "naughty", "careful"],
+    "neutral": []
+}
+
+def detect_emotion(text: str) -> str:
+    if not text:
+        return "neutral"
+    text_lower = text.lower()
+    for emotion, keywords in EMOTION_MAP.items():
+        if any(kw in text_lower for kw in keywords):
+            return emotion
+    return "neutral"
+
+def log_conversation_start(convo_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO conversations (convo_id) VALUES (?)", (convo_id,))
+    c.execute("UPDATE conversations SET last_active = CURRENT_TIMESTAMP WHERE convo_id = ?", (convo_id,))
+    conn.commit()
+    conn.close()
+
+def log_message(convo_id: str, role: str, content: str):
+    emotion = detect_emotion(content) if role == "assistant" else "neutral"
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (convo_id, role, content, emotion) VALUES (?, ?, ?, ?)",
+              (convo_id, role, content, emotion))
+    c.execute("UPDATE conversations SET last_active = CURRENT_TIMESTAMP, message_count = message_count + 1 WHERE convo_id = ?",
+              (convo_id,))
+    conn.commit()
+    conn.close()
+
+# ── Anonymous Memory (now using memory.py) ─────────────────────────────────
+def get_history(convo_id: str) -> List[Dict]:
+    return get_memory_history(convo_id)
+
+def save_message(convo_id: str, message: Dict):
+    save_memory_message(convo_id, message)
+
+# ── Rate limiting ───────────────────────────────────────────────────────────
 convo_rate_limits = defaultdict(list)
 
-def is_rate_limited(user_id: str, max_per_minute: int = 15):
+def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
     now = time.time()
-    convo_rate_limits[user_id] = [t for t in convo_rate_limits[user_id] if now - t < 60]
-    convo_rate_limits[user_id].append(now)
-    return len(convo_rate_limits[user_id]) > max_per_minute
+    convo_rate_limits[convo_id] = [t for t in convo_rate_limits[convo_id] if now - t < 60]
+    convo_rate_limits[convo_id].append(now)
+    return len(convo_rate_limits[convo_id]) > max_per_minute
 
-# ── NYC Context ─────────────────────────────────────────────────────────────
+# ── NYC context ─────────────────────────────────────────────────────────────
 def get_nyc_context() -> Dict[str, str]:
     nyc_tz = ZoneInfo("America/New_York")
     now_nyc = datetime.now(nyc_tz)
     time_str = now_nyc.strftime("%I:%M %p on %A, %B %d")
-    
     try:
         r = requests.get("https://wttr.in/NYC?format=%c+%t+%w", timeout=5)
         if r.status_code == 200:
@@ -74,92 +195,205 @@ def get_nyc_context() -> Dict[str, str]:
             weather = "cool and clear"
     except:
         weather = "chilly evening"
-    
     return {"time": time_str, "weather": weather}
 
-# ── Routes ───────────────────────────────────────────────────────────────
+# ── Improved split_into_bubbles ─────────────────────────────────────────────
+def split_into_bubbles(text: str) -> List[str]:
+    if not text.strip():
+        return ["..."]
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if len(paragraphs) <= 1:
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        paragraphs = []
+        current = ""
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if current and random.random() < 0.45 and len(paragraphs) < 3:   # Increased chance
+                paragraphs.append(current.strip())
+                current = sentence
+            else:
+                if current:
+                    current += " " + sentence
+                else:
+                    current = sentence
+        if current:
+            paragraphs.append(current.strip())
+    if len(paragraphs) == 1 and len(paragraphs[0]) > 160:
+        sentences = re.split(r'(?<=[.!?])\s+', paragraphs[0])
+        paragraphs = []
+        current = ""
+        for sentence in sentences:
+            if len(current) > 95 and len(paragraphs) < 3:
+                paragraphs.append(current.strip())
+                current = sentence
+            else:
+                current += " " + sentence if current else sentence
+        if current:
+            paragraphs.append(current.strip())
+    paragraphs = [p.strip() for p in paragraphs if p.strip()]
+    return paragraphs if paragraphs else [text.strip()]
+
+# ── Routes ──────────────────────────────────────────────────────────────────
 @app.get("/")
 async def home():
-    return RedirectResponse(url="/chat?v=0525")
+    try:
+        with open("static/home.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
+    except FileNotFoundError:
+        return HTMLResponse("<h1>Error: home.html not found</h1>", status_code=500)
+
+# ── User Login & Management Routes ─────────────────────────────────────
+@app.post("/api/login")
+async def login_user(body: Dict[str, str] = Body(...)):
+    email = body.get("email", "").strip().lower()
+    first_name = body.get("first_name", "").strip()
+    last_name = body.get("last_name", "").strip()
+
+    if not email or not first_name or not last_name:
+        raise HTTPException(400, "Email, first name, and last name are required")
+
+    create_or_get_user(email, first_name, last_name)
+    
+    return {
+        "success": True,
+        "email": email,
+        "first_name": first_name,
+        "last_name": last_name
+    }
+
+@app.get("/api/me")
+async def get_current_user(email: str):
+    """Simple endpoint to verify user and get basic info"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT first_name, last_name FROM users WHERE email = ?", (email,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(404, "User not found")
+
+    return {
+        "email": email,
+        "first_name": row[0],
+        "last_name": row[1]
+    }
 
 @app.get("/chat")
 async def chat_page():
     try:
         with open("static/chat.html", "r", encoding="utf-8") as f:
             content = f.read()
+        
         response = HTMLResponse(content)
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, private"
+        
+        # FORCE FRESH LOAD - No more caching issues
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        
+        # Extra safety for Safari
         response.headers["Surrogate-Control"] = "no-store"
-        response.headers["Vary"] = "Accept-Encoding, User-Agent"
+        
         return response
     except FileNotFoundError:
-        return HTMLResponse("<h1>chat.html not found</h1>", 404)
+        return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
-# ── GENERATE REPLY with Natural Name System ─────────────────────────────
+@app.post("/api/send")
+async def send_message(body: Dict[str, str] = Body(...)):
+    email = body.get("email", "").strip().lower()
+    message = body.get("message", "").strip()
+
+    if not email or not message:
+        raise HTTPException(400, "email and message required")
+
+    if is_rate_limited(email):
+        raise HTTPException(429, "Slow down... let's not rush this 😏")
+
+    save_message(email, {"role": "user", "content": message})
+
+    return {"success": True}
+
+
 @app.post("/api/reply")
-async def generate_reply(body: Dict = Body(...)):
-    user_id = body.get("user_id", "default").strip().lower()
-    if not user_id:
-        raise HTTPException(400, "user_id required")
+async def generate_reply(body: Dict[str, str] = Body(...)):
+    email = body.get("email", "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
 
-    # Cooldown + Rate limit
+    # Backend Guard
     now = time.time()
-    if now - last_reply_time[user_id] < REPLY_COOLDOWN_SECONDS:
-        return {"replies": [], "voice_note": ""}
-    last_reply_time[user_id] = now
+    if now - last_reply_time[email] < REPLY_COOLDOWN_SECONDS:
+        logger.info(f"Duplicate reply blocked for user {email}")
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
+    
+    last_reply_time[email] = now
 
-    if is_rate_limited(user_id):
-        return {"replies": [], "voice_note": ""}
+    if is_rate_limited(email):
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
-    log_prefix = f"User {user_id}"
+    log_prefix = f"User {email}"
     context = get_nyc_context()
 
-    history = get_history(user_id)
+    # Get history using user_email
+    history = get_history(email)
     if len(history) > 40:
         history = history[-40:]
 
-    user_name = get_user_name(user_id)
+    # Silence Detector
+    time_gap_minutes = 0
+    silence_note = ""
+    if history:
+        last_user_msg = None
+        for msg in reversed(history):
+            if msg.get("role") == "user":
+                last_user_msg = msg
+                break
+        if last_user_msg and "timestamp" in last_user_msg:
+            try:
+                last_time = datetime.fromisoformat(str(last_user_msg["timestamp"]).replace("Z", "+00:00"))
+                time_gap_minutes = int((datetime.now(ZoneInfo("UTC")) - last_time).total_seconds() / 60)
+                if time_gap_minutes > 60:
+                    silence_note = "The user just came back after some time. Respond naturally."
+            except:
+                pass
 
-    # Natural name detection
-    if not user_name and history:
-        last_msg = history[-1]["content"].lower()
-        triggers = ["my name is", "i'm ", "call me ", "name's ", "i am "]
-        for trigger in triggers:
-            if trigger in last_msg:
-                potential = last_msg.split(trigger)[-1].split(".")[0].split(",")[0].strip().title()
-                if 3 <= len(potential) <= 20 and potential.replace(" ", "").isalpha():
-                    save_user_name(user_id, potential)
-                    user_name = potential
-                    logger.info(f"Saved new name: {potential}")
-                    break
+    # Memory + Relationship
+    relevant_facts = get_relevant_facts(email, limit=5)
+    rel_level = get_relationship_level(email)
+    pet_name = get_pet_name(email)
 
-    # Build System Prompt
-    relevant_facts = get_relevant_facts(user_id, limit=5)
-    rel_level = get_relationship_level(user_id)
-    pet_name = get_pet_name(user_id)
+    memory_summary = ""
+    if relevant_facts and time_gap_minutes < 180:
+        memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:4])
 
     system_prompt = get_system_prompt(
-        user_name=user_name,
+        user_name=None,
         current_time=context["time"],
         weather=context["weather"]
     )
 
-    if relevant_facts:
-        system_prompt += f"\n\nKey memories: {' | '.join(relevant_facts[:4])}"
-
-    system_prompt += f"\nRelationship level: {rel_level}/10"
+    if memory_summary:
+        system_prompt += f"\n\n{memory_summary}"
+    system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
     if pet_name:
-        system_prompt += f" Call them '{pet_name}' sometimes."
+        system_prompt += f" You sometimes call him '{pet_name}' naturally."
 
-    if not user_name:
-        system_prompt += "\nYou don't know their name yet. Ask warmly and naturally."
+    if silence_note:
+        system_prompt += f"\n\n{silence_note}"
 
-    messages = [{"role": "system", "content": system_prompt}] + history[-22:]
+    # History for LLM
+    recent_history = history[-22:] if time_gap_minutes <= 90 else history[-14:]
+
+    messages = [{"role": "system", "content": system_prompt}] + recent_history
 
     # Call Grok
-    headers = {"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {XAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
     data = {
         "model": XAI_MODEL,
         "messages": messages,
@@ -172,8 +406,8 @@ async def generate_reply(body: Dict = Body(...)):
         resp.raise_for_status()
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.error(f"{log_prefix} XAI error: {e}")
-        return {"replies": ["Sorry, I'm having a moment..."], "voice_note": ""}
+        logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
 
     reply = clean_reply(raw_reply)
     bubbles = split_into_bubbles(reply)
@@ -186,20 +420,24 @@ async def generate_reply(body: Dict = Body(...)):
         try:
             voice_note = generate_voice_note(bubbles[-1])
         except Exception as e:
-            logger.error(f"Voice note error: {e}")
+            logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
 
     # Save messages
     for bubble in bubbles:
-        save_message(user_id, {"role": "assistant", "content": bubble, "voice_note": voice_note})
-
-    if has_emotion and random.random() < 0.35:
-        update_relationship(user_id, delta=1)
+        save_message(email, {
+            "role": "assistant",
+            "content": bubble,
+            "voice_note": voice_note
+        })
 
     if len(history) % 12 == 0 and len(history) > 10:
-        summarize_recent_chat(user_id)
+        summarize_recent_chat(email)
+
+    if has_emotion and random.random() < 0.35:
+        update_relationship(email, delta=1)
 
     return {"replies": bubbles, "voice_note": voice_note}
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
