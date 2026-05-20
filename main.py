@@ -7,7 +7,88 @@ import time
 import logging
 import csv
 import sqlite3
-from datetime import datetime
+from datetime import datetimeimport os
+import logging
+from datetime import datetime, timedelta
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ── Imports from your files ─────────────────────────────────────────────────
+from memory import init_db, create_user, get_history, save_message
+from auth import authenticate_user, create_access_token, get_current_user, get_password_hash
+from app_schemas import UserCreate, Token, UserLogin, TipRequest
+
+# Stripe (optional)
+stripe = None
+if os.getenv("STRIPE_SECRET_KEY"):
+    import stripe
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+app = FastAPI(title="Isabella")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Initialize database
+init_db()
+print("=== init_db() completed successfully ===")
+
+# ── Routes ──────────────────────────────────────────────────────────────────
+@app.get("/chat")
+async def chat_page():
+    try:
+        with open("static/chat.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
+    except FileNotFoundError:
+        return HTMLResponse("<h1>chat.html not found</h1>", status_code=500)
+
+@app.post("/auth/register", response_model=Token)
+async def register(user: UserCreate):
+    try:
+        hashed_pw = get_password_hash(user.password)
+        user_id = create_user(user.email, hashed_pw)
+        token = create_access_token(data={"sub": str(user_id)})
+        return {"access_token": token, "token_type": "bearer"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/auth/login", response_model=Token)
+async def login(user: UserLogin):
+    user_db = authenticate_user(user.email, user.password)
+    if not user_db:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
+    token = create_access_token(data={"sub": str(user_db["id"])})
+    return {"access_token": token, "token_type": "bearer"}
+
+@app.get("/auth/me")
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+    return current_user
+
+@app.post("/api/create-checkout-session")
+async def create_checkout_session(request: TipRequest, current_user: dict = Depends(get_current_user)):
+    if not can_send_pic(current_user["id"]):
+        raise HTTPException(403, "You've reached the maximum of 5 exclusive pics this month")
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": "price_1T1f1cF49k4gEmVBLQ7Mu5xd", "quantity": 1}],
+            mode="payment",
+            success_url="http://127.0.0.1:8000/chat?payment=success",
+            cancel_url="http://127.0.0.1:8000/chat?payment=cancel",
+            metadata={"user_id": current_user["id"], "tip_type": request.tip_type}
+        )
+        return {"checkout_url": session.url}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
 from zoneinfo import ZoneInfo
 import requests
 from dotenv import load_dotenv
