@@ -587,9 +587,16 @@
                     body: JSON.stringify({ convo_id: convoId })
                 });
         
+                if (!res.ok) {
+                    console.error(`Server returned ${res.status}`);
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+        
                 const data = await res.json();
+                console.log("Bot reply data received:", data);   // ← Debug helper
         
                 if (!data.replies || data.replies.length === 0) {
+                    console.warn("Empty reply from server");
                     typingIndicator.classList.remove('visible');
                     return;
                 }
