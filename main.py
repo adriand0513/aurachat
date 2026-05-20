@@ -239,10 +239,10 @@ def split_into_bubbles(text: str) -> List[str]:
 @app.get("/")
 async def home():
     try:
-        with open("static/home.html", "r", encoding="utf-8") as f:
+        with open("static/chat.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
     except FileNotFoundError:
-        return HTMLResponse("<h1>Error: home.html not found</h1>", status_code=500)
+        return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
 @app.get("/chat")
 async def chat_page():
