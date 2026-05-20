@@ -239,10 +239,19 @@ def split_into_bubbles(text: str) -> List[str]:
 @app.get("/")
 async def home():
     try:
-        with open("static/home.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
+        with open("static/chat.html", "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        response = HTMLResponse(content)
+        
+        # Force fresh load - prevents caching issues
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
+        return response
     except FileNotFoundError:
-        return HTMLResponse("<h1>Error: home.html not found</h1>", status_code=500)
+        return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
 
 @app.get("/chat")
 async def chat_page():
