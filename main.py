@@ -45,6 +45,7 @@ last_reply_time = defaultdict(float)
 REPLY_COOLDOWN_SECONDS = 3.0
 
 convo_rate_limits = defaultdict(list)
+
 def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
     now = time.time()
     convo_rate_limits[convo_id] = [t for t in convo_rate_limits[convo_id] if now - t < 60]
@@ -85,11 +86,11 @@ async def home():
         return HTMLResponse("<h1>Server Error - chat.html not found</h1>", 500)
 
 @app.post("/api/reply")
-async def generate_reply(body: Dict[str, str] = Body(...)):
+async def generate_reply(body: dict = Body(...)):   # ← Changed from Dict[str, str]
     convo_id = body.get("convo_id")
     user_message = body.get("message", "").strip()
 
-    logger.info(f"📥 Reply request | convo={convo_id} | msg='{user_message[:80]}'")
+    logger.info(f"📥 /api/reply | convo={convo_id} | msg='{user_message[:100]}'")
 
     if not convo_id:
         raise HTTPException(400, "convo_id required")
@@ -107,7 +108,6 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
     try:
         context = get_nyc_context()
 
-        # Save user message
         if user_message:
             save_message(convo_id, {"role": "user", "content": user_message})
 
@@ -115,23 +115,22 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         if len(history) > 40:
             history = history[-40:]
 
-        # Build prompt
         system_prompt = get_system_prompt(
             user_name=None,
-            current_time=context["time"],
-            weather=context["weather"]
+            current_time=context.get("time", ""),
+            weather=context.get("weather", "")
         )
 
-        # Add memory
+        # Add memory context
         relevant_facts = get_relevant_facts(convo_id, limit=5)
         rel_level = get_relationship_level(convo_id)
         pet_name = get_pet_name(convo_id)
 
         if relevant_facts:
-            system_prompt += f"\n\nKey facts: {' | '.join(relevant_facts[:4])}"
-        system_prompt += f"\nRelationship level: {rel_level}/10"
+            system_prompt += f"\n\nKey facts about him: {' | '.join(relevant_facts[:4])}"
+        system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
         if pet_name:
-            system_prompt += f" You call him '{pet_name}' sometimes."
+            system_prompt += f" You sometimes call him '{pet_name}'."
 
         messages = [{"role": "system", "content": system_prompt}] + history[-20:]
 
@@ -156,13 +155,12 @@ async def generate_reply(body: Dict[str, str] = Body(...)):
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble})
 
-        logger.info(f"✅ Generated {len(bubbles)} replies")
+        logger.info(f"✅ Generated {len(bubbles)} bubbles")
         return {"replies": bubbles, "voice_note": ""}
 
     except Exception as e:
-        logger.error(f"💥 ERROR in generate_reply: {e}", exc_info=True)
+        logger.error(f"💥 CRITICAL ERROR: {e}", exc_info=True)
         return {"replies": ["Sorry, I'm having trouble responding right now..."], "voice_note": ""}
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
