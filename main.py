@@ -267,7 +267,7 @@ async def home():
         
     except Exception as e:
         print(f"Error serving homepage: {e}")
-        return HTMLResponse(f"<h1>Server Error: {str(e)}</h1>", 500))
+        return HTMLResponse(f"<h1>Server Error: {str(e)}</h1>", 500)
 
 @app.get("/chat")
 async def chat_page():
