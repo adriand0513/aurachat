@@ -66,7 +66,7 @@ import time
 
 # ── Backend Anti-Duplicate Guard ─────────────────────────────────────
 last_reply_time = defaultdict(float)   # convo_id → timestamp of last reply
-REPLY_COOLDOWN_SECONDS = 4             # Adjust if needed (4-8 seconds is good)
+REPLY_COOLDOWN_SECONDS = 6             # Adjust if needed (4-8 seconds is good)
 
 # ── Private CSV Logging (ONLY FOR YOUR USE) ─────────────────────────────────
 CSV_LOG_FILE = "isabella_private_logs.csv"
@@ -239,10 +239,10 @@ def split_into_bubbles(text: str) -> List[str]:
 @app.get("/")
 async def home():
     try:
-        with open("static/chat.html", "r", encoding="utf-8") as f:
+        with open("static/home.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
     except FileNotFoundError:
-        return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
+        return HTMLResponse("<h1>Error: home.html not found</h1>", status_code=500)
 
 @app.get("/chat")
 async def chat_page():
@@ -278,30 +278,148 @@ async def send_message(body: Dict[str, str] = Body(...)):
 @app.post("/api/reply")
 async def generate_reply(body: Dict[str, str] = Body(...)):
     convo_id = body.get("convo_id")
-    user_message = body.get("message", "")
+    if not convo_id:
+        raise HTTPException(400, "convo_id required")
 
-    logger.info(f"REPLY REQUEST → convo={convo_id} | message='{user_message[:100]}'")
+    # === NEW BACKEND GUARD ===
+    now = time.time()
+    if now - last_reply_time[convo_id] < REPLY_COOLDOWN_SECONDS:
+        logger.info(f"Duplicate reply blocked for convo {convo_id} (cooldown)")
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
+    
+    last_reply_time[convo_id] = now
+    # =========================
+
+    if is_rate_limited(convo_id):
+        return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
+
+    log_prefix = f"Convo {convo_id}"
+    context = get_nyc_context()
+
+    # Get full history
+    history = get_history(convo_id)
+    if len(history) > 40:
+        history = history[-40:]
+
+    # ── Improved Silence Detector ─────────────────────────────────────
+    time_gap_minutes = 0
+    silence_note = ""
+
+    if history:
+        last_user_msg = None
+        for msg in reversed(history):
+            if msg["role"] == "user":
+                last_user_msg = msg
+                break
+        
+        if last_user_msg and "timestamp" in last_user_msg:
+            try:
+                last_time = datetime.fromisoformat(str(last_user_msg["timestamp"]).replace("Z", "+00:00"))
+                time_gap_minutes = int((datetime.now(ZoneInfo("UTC")) - last_time).total_seconds() / 60)
+                
+                if time_gap_minutes > 60:  # More than 1 hour silence
+                    if time_gap_minutes < 1440:  # Less than 24 hours
+                        silence_note = "The user just came back after several hours. Respond to his new message naturally and casually. Don't continue old topics unless he brings them up."
+                    else:
+                        silence_note = "The user just came back after more than a day. Greet him warmly like you missed chatting, then respond to what he just said. Don't stay stuck on old conversation topics."
+            except:
+                pass
+
+    # ── Memory + Relationship ────────────────────────────────────────
+    relevant_facts = get_relevant_facts(convo_id, limit=5)  # Reduced
+    rel_level = get_relationship_level(convo_id)
+    pet_name = get_pet_name(convo_id)
+
+    memory_summary = ""
+    if relevant_facts and time_gap_minutes < 180:  # Only show memory if not long silence
+        memory_summary = "Key things you remember about him: " + " | ".join(relevant_facts[:4])
+
+    system_prompt = get_system_prompt(
+        user_name=None,
+        current_time=context["time"],
+        weather=context["weather"]
+    )
+
+    if memory_summary:
+        system_prompt += f"\n\n{memory_summary}"
+    
+    system_prompt += f"\nCurrent relationship closeness: Level {rel_level}/10."
+    if pet_name:
+        system_prompt += f" You sometimes call him '{pet_name}' naturally."
+    else:
+        system_prompt += " Avoid pet names unless he uses one first."
+
+    if silence_note:
+        system_prompt += f"\n\n{silence_note}"
+
+    # Decide history length - this is the biggest fix for repetition
+    if time_gap_minutes > 90:          # After ~1.5 hours silence
+        recent_history = history[-14:] # Much shorter
+    else:
+        recent_history = history[-22:] # Reduced from -28
+
+    messages = [{"role": "system", "content": system_prompt}] + recent_history
+
+    # Call Grok
+    headers = {
+        "Authorization": f"Bearer {XAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": XAI_MODEL,
+        "messages": messages,
+        "temperature": XAI_TEMPERATURE,
+        "max_tokens": XAI_MAX_TOKENS,
+    }
 
     try:
-        # Save user message
-        if user_message.strip():
-            save_message(convo_id, {"role": "user", "content": user_message.strip()})
-
-        # Simple test reply - bypasses Grok and memory complexity
-        test_reply = f"Hey... I got your message: '{user_message}'. What’s on your mind right now? 😊"
-
-        save_message(convo_id, {"role": "assistant", "content": test_reply})
-
-        logger.info("✅ Sent test reply successfully")
-        return {"replies": [test_reply], "voice_note": ""}
-
+        resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=90)
+        resp.raise_for_status()
+        raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.error(f"Backend crashed: {e}", exc_info=True)
-        return {"replies": ["Sorry, I'm having trouble thinking right now... try again?"], "voice_note": ""}
-
-    except Exception as e:
-        logger.error(f"CRITICAL ERROR in generate_reply: {str(e)}", exc_info=True)
+        logger.error(f"{log_prefix} XAI FAILURE: {str(e)}")
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
-        
+
+    reply = clean_reply(raw_reply)
+    bubbles = split_into_bubbles(reply)
+    voice_note = ""
+
+    emotional_keywords = ["miss", "love", "kiss", "horny", "sexy", "touch", "body", "want", "feel", "good", "night", "dream", "thinking", "smile", "heart", "crave"]
+    has_emotion = any(kw in reply.lower() for kw in emotional_keywords)
+
+    if has_emotion and random.random() < 0.20 and bubbles:
+        try:
+            voice_note = generate_voice_note(bubbles[-1])
+        except Exception as e:
+            logger.error(f"{log_prefix} ElevenLabs FAILURE: {str(e)}")
+
+    # Save messages
+    for bubble in bubbles:
+        save_message(convo_id, {"role": "assistant", "content": bubble})
+
+    # Occasional summarization
+    if len(history) % 12 == 0 and len(history) > 10:
+        summarize_recent_chat(convo_id)
+
+    if has_emotion and random.random() < 0.35:
+        update_relationship(convo_id, delta=1)
+
+    # CSV log
+    if bubbles:
+        last_user = ""
+        if history:
+            for msg in reversed(history):
+                if msg["role"] == "user":
+                    last_user = msg["content"]
+                    break
+        log_to_csv(
+            convo_id=convo_id,
+            user_message=last_user,
+            isabella_reply=" | ".join(bubbles),
+            emotion=detect_emotion(" ".join(bubbles)),
+            voice_note=bool(voice_note)
+        )
+
+    return {"replies": bubbles, "voice_note": voice_note}
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")
