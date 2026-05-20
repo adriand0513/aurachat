@@ -498,116 +498,72 @@
     }
     
     async function sendMessage() {
-    
+        if (isSending) return;
         const msg = input.value.trim();
-    
         if (!msg) return;
     
+        isSending = true;
         addMessage(msg, 'sent');
-    
-        messagesHistory.push({
-            role: 'user',
-            content: msg
-        });
-    
+        
+        messagesHistory.push({ role: 'user', content: msg });
         saveHistory();
-    
         input.value = '';
+    
+        // Trigger reply with the actual message
+        await triggerBotReply(msg);
+    
+        isSending = false;
         input.focus();
-    
-        if (userIdleTimeout) {
-            clearTimeout(userIdleTimeout);
-        }
-    
-        userIdleTimeout = setTimeout(() => {
-            triggerBotReply();
-        }, USER_IDLE_PAUSE);
     }
     
-    async function triggerBotReply() {
-    
-        if (isGeneratingReply) return;
-    
-        isGeneratingReply = true;
-    
+    async function triggerBotReply(userMessage = null) {
+        if (isSending) return;
+        isSending = true;
         typingIndicator.classList.add('visible');
     
         try {
+            const payload = { convo_id: convoId };
+            if (userMessage) {
+                payload.message = userMessage;   // Send the message directly
+            }
     
             const res = await fetch('/api/reply', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    convo_id: convoId
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
     
             const data = await res.json();
     
             if (!data.replies || data.replies.length === 0) {
-    
                 typingIndicator.classList.remove('visible');
-                isGeneratingReply = false;
                 return;
             }
     
             for (let i = 0; i < data.replies.length; i++) {
-    
                 const bubble = data.replies[i];
-    
-                const isLast =
-                    i === data.replies.length - 1;
-    
-                const delay = Math.min(
-                    1200 + bubble.length * 18,
-                    4500
-                );
+                const isLast = i === data.replies.length - 1;
+                const delay = i === 0 ? 0 : 2800;
     
                 await new Promise(resolve => {
-    
                     setTimeout(() => {
-    
                         if (isLast && data.voice_note) {
-    
-                            messagesHistory.push({
-                                role: 'assistant',
-                                content: bubble,
-                                voice_note: data.voice_note
-                            });
-    
                             addVoiceNote(data.voice_note);
-    
+                            messagesHistory.push({ role: 'assistant', content: bubble, voice_note: data.voice_note });
                         } else {
-    
                             addMessage(bubble, 'received');
-    
-                            messagesHistory.push({
-                                role: 'assistant',
-                                content: bubble
-                            });
+                            messagesHistory.push({ role: 'assistant', content: bubble });
                         }
-    
                         saveHistory();
-    
                         resolve();
-    
                     }, delay);
-    
                 });
-    
             }
-    
         } catch (err) {
-    
             console.error('Reply error:', err);
-    
         } finally {
-    
             typingIndicator.classList.remove('visible');
-    
-            isGeneratingReply = false;
+            isSending = false;
         }
     }
     
