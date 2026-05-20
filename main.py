@@ -239,10 +239,35 @@ def split_into_bubbles(text: str) -> List[str]:
 @app.get("/")
 async def home():
     try:
-        with open("static/chat.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
-    except FileNotFoundError:
-        return HTMLResponse("<h1>Error: chat.html not found</h1>", status_code=500)
+        # Try multiple possible locations
+        possible_paths = [
+            "static/chat.html",
+            "chat.html",
+            "/opt/render/project/src/static/chat.html",  # Render common path
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                print(f"✅ Successfully serving from: {path}")
+                response = HTMLResponse(content)
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+                return response
+                
+        # Fallback if nothing found
+        return HTMLResponse("""
+            <h1 style="color:white; text-align:center; margin-top:100px;">
+                Error: chat.html not found<br><br>
+                Check that static/chat.html exists in your project
+            </h1>
+        """, status_code=404)
+        
+    except Exception as e:
+        print(f"Error serving homepage: {e}")
+        return HTMLResponse(f"<h1>Server Error: {str(e)}</h1>", 500))
 
 @app.get("/chat")
 async def chat_page():
