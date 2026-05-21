@@ -134,6 +134,7 @@
     <div id="chat-wrapper">
         <div id="messages"></div>
 
+        <!-- Typing Indicator -->
         <div id="typing-container">
             <div class="typing-indicator">
                 <div class="typing-dot"></div>
@@ -160,9 +161,8 @@
         let messagesHistory = [];
         let isSending = false;
         let userTypingTimeout = null;
-
-        const USER_TYPING_DELAY = 4500;   // 4.5 seconds after user stops typing
-        const THINKING_DELAY = 3000;      // 3 seconds "thinking" delay
+        const USER_TYPING_DELAY = 4500;   // 4.5 seconds
+        const THINKING_DELAY = 3000;      // 3 seconds thinking delay
 
         function loadHistory() {
             try {
@@ -204,12 +204,11 @@
             return Math.max(1400, Math.min(baseTime, 11000));
         }
 
-        // Main function that actually sends to backend with thinking delay
         async function sendToBackend(msg) {
             if (isSending) return;
             isSending = true;
 
-            // 3-second thinking delay BEFORE showing typing indicator
+            // 3-second thinking delay before showing typing indicator
             await new Promise(resolve => setTimeout(resolve, THINKING_DELAY));
             
             showTyping();
@@ -244,7 +243,6 @@
             }
         }
 
-        // Delayed sending while user is typing
         function handleUserInput() {
             if (userTypingTimeout) clearTimeout(userTypingTimeout);
             userTypingTimeout = setTimeout(() => {
@@ -259,29 +257,34 @@
             }, USER_TYPING_DELAY);
         }
 
-        // Immediate send on Enter or Send button
-        function sendMessageImmediately() {
-            if (userTypingTimeout) clearTimeout(userTypingTimeout);
+        input.addEventListener('input', handleUserInput);
+
+        input.addEventListener('keypress', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const msg = input.value.trim();
+                if (msg) {
+                    if (userTypingTimeout) clearTimeout(userTypingTimeout);
+                    addMessage(msg, 'sent');
+                    messagesHistory.push({ role: 'user', content: msg });
+                    saveHistory();
+                    input.value = '';
+                    sendToBackend(msg);
+                }
+            }
+        });
+
+        sendBtn.addEventListener('click', () => {
             const msg = input.value.trim();
-            if (msg && !isSending) {
+            if (msg) {
+                if (userTypingTimeout) clearTimeout(userTypingTimeout);
                 addMessage(msg, 'sent');
                 messagesHistory.push({ role: 'user', content: msg });
                 saveHistory();
                 input.value = '';
                 sendToBackend(msg);
             }
-        }
-
-        input.addEventListener('input', handleUserInput);
-
-        input.addEventListener('keypress', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessageImmediately();
-            }
         });
-
-        sendBtn.addEventListener('click', sendMessageImmediately);
 
         window.addEventListener('load', () => {
             loadHistory();
