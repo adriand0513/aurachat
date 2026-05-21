@@ -35,12 +35,14 @@
             background: url('/static/images/isabella.png') center/cover;
             border: 2px solid var(--accent);
         }
+
         #chat-wrapper {
             flex: 1;
             display: flex;
             flex-direction: column;
             min-height: 0;
         }
+
         #messages {
             flex: 1;
             overflow-y: auto;
@@ -49,6 +51,7 @@
             flex-direction: column;
             gap: 12px;
         }
+
         .message {
             max-width: 80%;
             padding: 12px 16px;
@@ -56,15 +59,16 @@
             font-size: 15.5px;
             line-height: 1.45;
         }
-        .sent {
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
-            color: white;
-            align-self: flex-end;
+        .sent { 
+            background: linear-gradient(135deg, var(--accent), var(--accent2)); 
+            color: white; 
+            align-self: flex-end; 
         }
-        .received {
-            background: rgba(30,20,50,0.95);
-            align-self: flex-start;
+        .received { 
+            background: rgba(30,20,50,0.95); 
+            align-self: flex-start; 
         }
+
         #typing-container {
             padding: 0 16px 8px 16px;
             background: rgba(20,5,40,0.95);
@@ -93,6 +97,7 @@
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
         }
+
         .input-area {
             padding: 12px 16px;
             background: rgba(20,5,40,0.95);
@@ -125,8 +130,10 @@
         <div class="avatar"></div>
         <h2>Isabella</h2>
     </div>
+
     <div id="chat-wrapper">
         <div id="messages"></div>
+
         <div id="typing-container">
             <div class="typing-indicator">
                 <div class="typing-dot"></div>
@@ -136,6 +143,7 @@
             </div>
         </div>
     </div>
+
     <div class="input-area">
         <input id="user-input" placeholder="Message Isabella..." autocomplete="off" />
         <button id="send-btn">➤</button>
@@ -149,13 +157,12 @@
 
         let convoId = localStorage.getItem('convo_id') || 'conv_' + Date.now();
         localStorage.setItem('convo_id', convoId);
-
         let messagesHistory = [];
         let isSending = false;
         let userTypingTimeout = null;
 
-        const USER_TYPING_DELAY = 4500;   // ← 4.5 seconds
-        const THINKING_DELAY = 3000;
+        const USER_TYPING_DELAY = 4500;   // 4.5 seconds after user stops typing
+        const THINKING_DELAY = 3000;      // 3 seconds "thinking" delay
 
         function loadHistory() {
             try {
@@ -197,11 +204,14 @@
             return Math.max(1400, Math.min(baseTime, 11000));
         }
 
+        // Main function that actually sends to backend with thinking delay
         async function sendToBackend(msg) {
             if (isSending) return;
             isSending = true;
 
-            await new Promise(r => setTimeout(r, THINKING_DELAY));
+            // 3-second thinking delay BEFORE showing typing indicator
+            await new Promise(resolve => setTimeout(resolve, THINKING_DELAY));
+            
             showTyping();
 
             try {
@@ -212,7 +222,8 @@
                 });
 
                 const data = await res.json();
-                if (data.replies?.length) {
+
+                if (data.replies && data.replies.length > 0) {
                     for (let bubble of data.replies) {
                         await new Promise(resolve => {
                             setTimeout(() => {
@@ -233,12 +244,9 @@
             }
         }
 
-        // ==================== DELAYED AUTO-SEND ====================
+        // Delayed sending while user is typing
         function handleUserInput() {
-            if (userTypingTimeout) {
-                clearTimeout(userTypingTimeout);
-            }
-
+            if (userTypingTimeout) clearTimeout(userTypingTimeout);
             userTypingTimeout = setTimeout(() => {
                 const msg = input.value.trim();
                 if (msg && !isSending) {
@@ -251,13 +259,9 @@
             }, USER_TYPING_DELAY);
         }
 
-        // Immediate send (Enter or button)
+        // Immediate send on Enter or Send button
         function sendMessageImmediately() {
-            if (userTypingTimeout) {
-                clearTimeout(userTypingTimeout);
-                userTypingTimeout = null;
-            }
-
+            if (userTypingTimeout) clearTimeout(userTypingTimeout);
             const msg = input.value.trim();
             if (msg && !isSending) {
                 addMessage(msg, 'sent');
@@ -268,7 +272,6 @@
             }
         }
 
-        // Event listeners
         input.addEventListener('input', handleUserInput);
 
         input.addEventListener('keypress', e => {
@@ -280,13 +283,14 @@
 
         sendBtn.addEventListener('click', sendMessageImmediately);
 
-        // Load history on start
         window.addEventListener('load', () => {
             loadHistory();
             messagesContainer.innerHTML = '';
+
             messagesHistory.forEach(m => {
                 addMessage(m.content, m.role === 'user' ? 'sent' : 'received');
             });
+
             scrollToBottom();
         });
     </script>
