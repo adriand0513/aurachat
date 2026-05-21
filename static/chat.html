@@ -193,8 +193,13 @@
 
         function getTypingDuration(text) {
             const wordCount = text.trim().split(/\s+/).length;
-            const baseTime = wordCount * 1000;
-            return Math.max(1400, Math.min(baseTime, 11000));
+            
+            // Faster & more natural typing speed (~85-95 WPM)
+            let baseTime = wordCount * 650;           
+            baseTime += Math.random() * 450;          // Human-like variation
+            
+            // Limits
+            return Math.max(800, Math.min(Math.floor(baseTime), 14500));
         }
 
         async function sendToBackend(msg) {
