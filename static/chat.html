@@ -93,6 +93,23 @@
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
         }
+
+        /* Offline Message */
+        #offline-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(30,20,50,0.95);
+            padding: 24px 32px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 85%;
+            display: none;
+            z-index: 100;
+            border: 1px solid var(--accent);
+        }
+
         .input-area {
             padding: 12px 16px;
             background: rgba(20,5,40,0.95);
@@ -118,6 +135,10 @@
             font-size: 20px;
             cursor: pointer;
         }
+        #user-input:disabled, #send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -136,6 +157,14 @@
             </div>
         </div>
     </div>
+
+    <!-- Offline Message -->
+    <div id="offline-message">
+        <h3>🌙 Isabella is resting</h3>
+        <p>She's only available between<br><strong>5:00 PM - 2:00 AM ET</strong></p>
+        <p style="margin-top: 12px; opacity: 0.8;">Come back during those hours ✨</p>
+    </div>
+
     <div class="input-area">
         <input id="user-input" placeholder="Message Isabella..." autocomplete="off" />
         <button id="send-btn">➤</button>
@@ -146,6 +175,7 @@
         const typingContainer = document.getElementById('typing-container');
         const input = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
+        const offlineMessage = document.getElementById('offline-message');
 
         let convoId = localStorage.getItem('convo_id') || 'conv_' + Date.now();
         localStorage.setItem('convo_id', convoId);
@@ -154,8 +184,34 @@
         let isSending = false;
         let responseTimeout = null;
 
-        const USER_TYPING_DELAY = 4500;  // Time after send before thinking
-        const THINKING_DELAY = 3000;     // 3 seconds thinking delay
+        const USER_TYPING_DELAY = 4500;
+        const THINKING_DELAY = 3000;
+
+        function isIsabellaAvailable() {
+            const now = new Date();
+            const nyFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/New_York',
+                hour: 'numeric',
+                hour12: false
+            });
+            const hour = parseInt(nyFormatter.format(now));
+            return hour >= 17 || hour < 2; // 5 PM to 2 AM ET
+        }
+
+        function updateAvailability() {
+            const available = isIsabellaAvailable();
+            
+            if (available) {
+                offlineMessage.style.display = 'none';
+                input.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                offlineMessage.style.display = 'block';
+                input.disabled = true;
+                sendBtn.disabled = true;
+                if (responseTimeout) clearTimeout(responseTimeout);
+            }
+        }
 
         function loadHistory() {
             try {
@@ -193,19 +249,14 @@
 
         function getTypingDuration(text) {
             const wordCount = text.trim().split(/\s+/).length;
-            
-            // Faster & more natural typing speed (~85-95 WPM)
-            let baseTime = wordCount * 650;           
-            baseTime += Math.random() * 450;          // Human-like variation
-            
-            // Limits
+            let baseTime = wordCount * 650;
+            baseTime += Math.random() * 450;
             return Math.max(800, Math.min(Math.floor(baseTime), 14500));
         }
 
         async function sendToBackend(msg) {
-            if (isSending) return;
+            if (isSending || !isIsabellaAvailable()) return;
             isSending = true;
-
             showTyping();
 
             try {
@@ -237,12 +288,10 @@
             }
         }
 
-        // Start the full delay sequence after user sends
         function startResponseTimer(msg) {
             if (responseTimeout) clearTimeout(responseTimeout);
 
             responseTimeout = setTimeout(() => {
-                // After 4.5s → start 3s thinking delay
                 setTimeout(() => {
                     sendToBackend(msg);
                     responseTimeout = null;
@@ -250,7 +299,6 @@
             }, USER_TYPING_DELAY);
         }
 
-        // Cancel timer if user types again
         function handleUserInput() {
             if (responseTimeout) {
                 clearTimeout(responseTimeout);
@@ -258,8 +306,8 @@
             }
         }
 
-        // Send message on Enter / Button
         function sendMessage() {
+            if (!isIsabellaAvailable()) return;
             const msg = input.value.trim();
             if (!msg || isSending) return;
 
@@ -268,21 +316,20 @@
             saveHistory();
 
             input.value = '';
-
             startResponseTimer(msg);
         }
 
+        // Event listeners
         input.addEventListener('input', handleUserInput);
-
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
         });
-
         sendBtn.addEventListener('click', sendMessage);
 
+        // Initialize
         window.addEventListener('load', () => {
             loadHistory();
             messagesContainer.innerHTML = '';
@@ -290,6 +337,9 @@
                 addMessage(m.content, m.role === 'user' ? 'sent' : 'received');
             });
             scrollToBottom();
+
+            updateAvailability();
+            setInterval(updateAvailability, 30000); // Check every 30 seconds
         });
     </script>
 </body>
