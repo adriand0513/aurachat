@@ -114,7 +114,7 @@
     let userTypingTimeout = null;
     const USER_TYPING_DELAY = 4500;
 
-    // Create typing indicator and make it stick to bottom
+    // Create typing indicator
     const typingIndicator = document.createElement('div');
     typingIndicator.className = 'typing-indicator';
     typingIndicator.innerHTML = `
@@ -251,7 +251,6 @@
         messagesHistory.forEach(m => {
             addMessage(m.content, m.role === 'user' ? 'sent' : 'received');
         });
-        messagesContainer.appendChild(typingIndicator);
         scrollToBottom();
     });
 </script>
