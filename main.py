@@ -42,7 +42,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ── Guards ─────────────────────────────────────
 last_reply_time = defaultdict(float)
-REPLY_COOLDOWN_SECONDS = 3.0
+REPLY_COOLDOWN_SECONDS = 4.5
 
 convo_rate_limits = defaultdict(list)
 
