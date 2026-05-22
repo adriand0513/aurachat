@@ -1,4 +1,4 @@
-# analytics.py
+# analytics.py - Enhanced with Archetype Tracking
 import sqlite3
 import json
 import time
@@ -27,11 +27,11 @@ def log_event(event_type: str, convo_id: str = None, user_id: int = None,
 
 
 def get_live_stats():
-    """Get real-time aggregated stats"""
+    """Get real-time stats including archetype distribution"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    # Active conversations in last 5 minutes
+    # Active conversations (last 5 minutes)
     c.execute('''
         SELECT COUNT(DISTINCT convo_id) 
         FROM analytics_events 
@@ -49,7 +49,7 @@ def get_live_stats():
     ''')
     messages_per_min = c.fetchone()[0] or 0
 
-    # Avg response time
+    # Average response time
     c.execute('''
         SELECT AVG(duration_ms) 
         FROM analytics_events 
@@ -59,39 +59,58 @@ def get_live_stats():
     ''')
     avg_response = round(c.fetchone()[0] or 0)
 
+    # Recent Archetypes
+    c.execute('''
+        SELECT metadata 
+        FROM analytics_events 
+        WHERE event_type = 'archetype_detected'
+        ORDER BY timestamp DESC 
+        LIMIT 50
+    ''')
+    archetype_data = []
+    archetype_count = defaultdict(int)
+    
+    for row in c.fetchall():
+        if row[0]:
+            try:
+                meta = json.loads(row[0])
+                arch = meta.get("archetype")
+                if arch and arch != "unknown":
+                    archetype_count[arch] += 1
+                    archetype_data.append(meta)
+            except:
+                pass
+
     conn.close()
 
     return {
         "active_sessions": active_convos,
         "messages_per_minute": messages_per_min,
         "avg_response_time_ms": avg_response,
+        "total_archetypes_detected": len(archetype_data),
+        "top_archetypes": dict(sorted(archetype_count.items(), key=lambda x: x[1], reverse=True)[:8]),
         "timestamp": datetime.now().isoformat()
     }
 
 
-def get_top_topics(limit=10):
-    """Simple topic extraction (can be enhanced with LLM later)"""
+def get_archetype_distribution():
+    """Get overall archetype statistics"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         SELECT metadata 
         FROM analytics_events 
-        WHERE event_type = 'message_sent' 
-        ORDER BY timestamp DESC LIMIT 200
+        WHERE event_type = 'archetype_detected'
     ''')
-    rows = c.fetchall()
-    conn.close()
-    
-    # Very basic keyword counting
-    keywords = defaultdict(int)
-    for row in rows:
+    counts = defaultdict(int)
+    for row in c.fetchall():
         if row[0]:
             try:
                 data = json.loads(row[0])
-                text = data.get('message', '').lower()
-                for word in ['love', 'miss', 'want', 'need', 'sexy', 'date', 'relationship', 'lonely', 'horny', 'flirt']:
-                    if word in text:
-                        keywords[word] += 1
+                arch = data.get("archetype")
+                if arch:
+                    counts[arch] += 1
             except:
                 pass
-    return dict(sorted(keywords.items(), key=lambda x: x[1], reverse=True)[:limit])
+    conn.close()
+    return dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
