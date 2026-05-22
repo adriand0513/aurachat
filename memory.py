@@ -1,9 +1,10 @@
-# memory.py - Long-term Memory & Relationship System for Isabella
+# memory.py - Long-term Memory & Relationship System + Analytics
 import sqlite3
 import os
 from datetime import datetime
 from typing import List, Dict, Optional
-from analytics import log_event
+
+from analytics import log_event   # ← Added for analytics
 
 DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
 
@@ -12,7 +13,7 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Raw chat history with proper convo_id
+    # Raw chat history
     c.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,14 +24,6 @@ def init_db():
         )
     ''')
 
-    # Safe migration: add convo_id column if it doesn't exist
-    try:
-        c.execute("ALTER TABLE chat_history ADD COLUMN convo_id TEXT")
-        print("Migrated: Added convo_id column to chat_history")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
-    # Create index
     c.execute('CREATE INDEX IF NOT EXISTS idx_convo_id ON chat_history (convo_id)')
 
     # Key long-term facts
@@ -59,7 +52,8 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print(f"Memory system initialized and migrated successfully. DB: {DB_PATH}")
+    print(f"Memory system initialized. DB: {DB_PATH}")
+
 
 # ── Basic History Functions ───────────────────────────────────────────────
 def get_history(convo_id: str, limit: int = 50) -> List[Dict]:
@@ -76,7 +70,9 @@ def get_history(convo_id: str, limit: int = 50) -> List[Dict]:
     conn.close()
     return [{"role": r[0], "content": r[1], "timestamp": r[2]} for r in rows]
 
+
 def save_message(convo_id: str, message: Dict):
+    """Save message and log analytics event"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -86,9 +82,14 @@ def save_message(convo_id: str, message: Dict):
     conn.commit()
     conn.close()
 
-    # Analytics
+    # Analytics tracking
     event_type = "message_sent" if message["role"] == "user" else "message_received"
-    log_event(event_type, convo_id, metadata={"length": len(message["content"])})
+    log_event(
+        event_type=event_type,
+        convo_id=convo_id,
+        metadata={"length": len(message["content"])}
+    )
+
 
 # ── Key Facts ─────────────────────────────────────────────────────────────
 def add_key_fact(convo_id: str, fact: str, importance: int = 7):
@@ -100,6 +101,7 @@ def add_key_fact(convo_id: str, fact: str, importance: int = 7):
     ''', (convo_id, fact, importance))
     conn.commit()
     conn.close()
+
 
 def get_relevant_facts(convo_id: str, limit: int = 8) -> List[str]:
     conn = sqlite3.connect(DB_PATH)
@@ -115,6 +117,7 @@ def get_relevant_facts(convo_id: str, limit: int = 8) -> List[str]:
     conn.close()
     return facts
 
+
 # ── Relationship Progression ──────────────────────────────────────────────
 def get_relationship_level(convo_id: str) -> int:
     conn = sqlite3.connect(DB_PATH)
@@ -124,6 +127,7 @@ def get_relationship_level(convo_id: str) -> int:
     conn.close()
     return row[0] if row else 1
 
+
 def get_pet_name(convo_id: str) -> str:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -131,6 +135,7 @@ def get_pet_name(convo_id: str) -> str:
     row = c.fetchone()
     conn.close()
     return row[0] if row and row[0] else "babe"
+
 
 def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
     conn = sqlite3.connect(DB_PATH)
@@ -146,12 +151,13 @@ def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] =
             level = ?,
             pet_name = COALESCE(?, pet_name),
             notes = COALESCE(notes || '\n' || ?, notes)
-    ''', (convo_id, new_level, pet_name, note))
+    ''', (convo_id, new_level, pet_name, note, new_level, pet_name, note))
     conn.commit()
     conn.close()
 
+
 def summarize_recent_chat(convo_id: str):
-    """Light summarizer for long-term memory (called occasionally)."""
+    """Light summarizer for long-term memory"""
     history = get_history(convo_id, limit=30)
     if len(history) < 8:
         return
@@ -165,5 +171,6 @@ def summarize_recent_chat(convo_id: str):
     for fact in facts[:5]:
         add_key_fact(convo_id, fact, importance=6)
 
-# Initialize
+
+# Initialize on import
 init_db()
