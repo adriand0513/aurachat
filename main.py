@@ -1,20 +1,21 @@
-# main.py - Isabella Chatbot (Complete & Stable with Real-time Analytics)
+# main.py - Isabella Chatbot (Complete with Analytics + Auth)
 import os
 import re
 import random
 import time
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import requests
 from dotenv import load_dotenv
 from typing import Dict, List
 from collections import defaultdict
 
-from fastapi import FastAPI, HTTPException, Body, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Body, WebSocket, WebSocketDisconnect, Depends, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
 
@@ -23,19 +24,23 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-# Import your modules
+# Import modules
 from config import (
     XAI_API_KEY, XAI_API_BASE, XAI_MODEL,
-    XAI_TEMPERATURE, XAI_MAX_TOKENS
+    XAI_TEMPERATURE, XAI_MAX_TOKENS, ADMIN_TOKEN
 )
 from prompt import get_system_prompt
 from postprocess import clean_reply
 from memory import (
     get_history, save_message, get_relevant_facts,
-    get_relationship_level, get_pet_name, summarize_recent_chat
+    get_relationship_level, get_pet_name
 )
 from relationship import update_relationship
-from analytics import log_event, get_live_stats   # ← New import
+from analytics import log_event, get_live_stats
+from auth import (
+    register_user, authenticate_user, create_access_token,
+    get_current_user, JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 
@@ -75,7 +80,84 @@ def split_into_bubbles(text: str) -> List[str]:
 # ── WebSocket Connections ─────────────────────────────
 active_ws = []
 
-# ── Routes ─────────────────────────────────────
+# ── Auth Routes ─────────────────────────────────────
+@app.post("/auth/register")
+async def register(body: dict = Body(...)):
+    email = body.get("email")
+    password = body.get("password")
+    full_name = body.get("full_name", "")
+
+    if not email or not password:
+        raise HTTPException(400, "Email and password required")
+
+    success = register_user(email, password, full_name)
+    if success:
+        log_event("user_registered", metadata={"email": email})
+        return {"message": "User registered successfully"}
+    else:
+        raise HTTPException(409, "Email already exists")
+
+
+@app.post("/auth/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(
+        data={"sub": str(user["id"])},
+        expires_delta=timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    
+    log_event("user_login", user_id=user["id"])
+    return {"access_token": access_token, "token_type": "bearer", "user": user}
+
+
+# ── Protected Dashboard ─────────────────────────────────────
+@app.get("/dashboard")
+async def admin_dashboard(token: str = None):
+    """Simple ADMIN_TOKEN protection (you can switch to JWT later)"""
+    if token != ADMIN_TOKEN and token != "Bearer " + ADMIN_TOKEN:
+        raise HTTPException(403, "Unauthorized - Invalid admin token")
+    
+    try:
+        with open("static/dashboard.html", "r", encoding="utf-8") as f:
+            content = f.read()
+        response = HTMLResponse(content)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}")
+        return HTMLResponse("<h1>Dashboard not found.</h1>", 404)
+
+
+# ── Analytics WebSocket (Protected) ─────────────────────────────
+@app.websocket("/ws/analytics")
+async def analytics_websocket(websocket: WebSocket, token: str = None):
+    # Simple token check via query param: ?token=your_admin_token
+    if token != ADMIN_TOKEN:
+        await websocket.close(code=1008)
+        return
+    
+    await websocket.accept()
+    active_ws.append(websocket)
+    logger.info("Analytics dashboard connected")
+    try:
+        while True:
+            stats = get_live_stats()
+            await websocket.send_json(stats)
+            await asyncio.sleep(1.5)
+    except WebSocketDisconnect:
+        active_ws.remove(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+
+
+# ── Chat Route ─────────────────────────────────────
 @app.get("/")
 async def home():
     try:
@@ -86,44 +168,12 @@ async def home():
         return response
     except Exception as e:
         logger.error(f"Homepage error: {e}")
-        return HTMLResponse("<h1>Server Error - chat.html not found</h1>", 500)
-
-
-@app.get("/dashboard")
-async def admin_dashboard():
-    """Real-time Analytics Dashboard"""
-    try:
-        with open("static/dashboard.html", "r", encoding="utf-8") as f:
-            content = f.read()
-        response = HTMLResponse(content)
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return response
-    except Exception as e:
-        logger.error(f"Dashboard error: {e}")
-        return HTMLResponse("<h1>Dashboard not found. Make sure dashboard.html exists in /static/</h1>", 404)
-
-
-@app.websocket("/ws/analytics")
-async def analytics_websocket(websocket: WebSocket):
-    """Real-time analytics streaming"""
-    await websocket.accept()
-    active_ws.append(websocket)
-    logger.info("New analytics dashboard connection")
-    try:
-        while True:
-            stats = get_live_stats()
-            await websocket.send_json(stats)
-            await asyncio.sleep(1.5)  # Update every 1.5 seconds
-    except WebSocketDisconnect:
-        active_ws.remove(websocket)
-        logger.info("Analytics dashboard disconnected")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        return HTMLResponse("<h1>Server Error</h1>", 500)
 
 
 @app.post("/api/reply")
 async def generate_reply(body: dict = Body(...)):
-    start_time = time.time()  # ← For latency tracking
+    start_time = time.time()
     
     convo_id = body.get("convo_id")
     user_message = body.get("message", "").strip()
@@ -133,7 +183,7 @@ async def generate_reply(body: dict = Body(...)):
     if not convo_id:
         raise HTTPException(400, "convo_id required")
 
-    # Cooldown
+    # Cooldown & Rate Limit
     now = time.time()
     if now - last_reply_time.get(convo_id, 0) < REPLY_COOLDOWN_SECONDS:
         return JSONResponse({"replies": [], "voice_note": ""}, status_code=200)
@@ -148,7 +198,6 @@ async def generate_reply(body: dict = Body(...)):
 
         if user_message:
             save_message(convo_id, {"role": "user", "content": user_message})
-            log_event("message_sent", convo_id, metadata={"length": len(user_message)})
 
         history = get_history(convo_id)
         if len(history) > 40:
@@ -160,7 +209,6 @@ async def generate_reply(body: dict = Body(...)):
             weather=context.get("weather", "")
         )
 
-        # Add memory context
         relevant_facts = get_relevant_facts(convo_id, limit=5)
         rel_level = get_relationship_level(convo_id)
         pet_name = get_pet_name(convo_id)
@@ -190,7 +238,6 @@ async def generate_reply(body: dict = Body(...)):
         raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
         bubbles = split_into_bubbles(clean_reply(raw_reply))
 
-        # Save replies
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble})
 
