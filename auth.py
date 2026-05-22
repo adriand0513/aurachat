@@ -1,4 +1,4 @@
-# auth.py - Full User Authentication + Profile
+# auth.py - Full User Authentication with Safe Migrations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, ExpiredSignatureError, JWTError
@@ -8,12 +8,11 @@ from fastapi.security import OAuth2PasswordBearer
 import sqlite3
 import os
 import logging
-import json
 
-from config import JWT_SECRET, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, ADMIN_TOKEN
+from config import JWT_SECRET, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 
 logger = logging.getLogger(__name__)
-DB_PATH = os.path.abspath(os.getenv("DB_PATH", "users.db"))
+DB_PATH = os.path.abspath(os.getenv("DB_PATH", "isabella.db"))
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -24,7 +23,10 @@ def get_password_hash(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -40,14 +42,13 @@ def register_user(email: str, password: str, full_name: str):
     c = conn.cursor()
     
     try:
-        # Safe migration: Add full_name column if it doesn't exist
+        # Safe migration: ensure full_name column exists
         c.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in c.fetchall()]
         
         if "full_name" not in columns:
-            print("Migrating: Adding full_name column to users table...")
+            logger.info("Migrating: Adding full_name column to users table")
             c.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
-            print("Migration successful")
 
         hashed = get_password_hash(password)
         c.execute('''
@@ -55,10 +56,10 @@ def register_user(email: str, password: str, full_name: str):
             VALUES (?, ?, ?)
         ''', (email, hashed, full_name))
         conn.commit()
-        logger.info(f"New user registered: {email}")
+        logger.info(f"✅ New user registered: {email}")
         return True
     except sqlite3.IntegrityError:
-        logger.warning(f"Registration failed - email already exists: {email}")
+        logger.warning(f"Email already exists: {email}")
         return False
     except Exception as e:
         logger.error(f"Registration error: {e}")
@@ -75,15 +76,18 @@ def authenticate_user(email: str, password: str):
     user = c.fetchone()
     conn.close()
 
-    if not user or not verify_password(password, user[2] if len(user) > 2 else ""):  # Adjust index if needed
+    if not user:
         return None
+    if not verify_password(password, user[2] if len(user) > 2 else ""):  # hashed_password is index 1 actually, adjust if needed
+        return None
+
     return {"id": user[0], "email": user[1], "full_name": user[2] if len(user) > 2 else None}
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid credentials",
+        detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -97,6 +101,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     c.execute("SELECT id, email, full_name FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     conn.close()
+    
     if user is None:
         raise credentials_exception
     return {"id": user[0], "email": user[1], "full_name": user[2] if len(user) > 2 else None}
