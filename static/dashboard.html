@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora SPARQ • Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0d0015; color: #f8f0ff; }
+        .card { background: rgba(30,20,50,0.95); border: 1px solid #c300ff; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-bold mb-8 text-center">Isabella Analytics</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="card p-6 rounded-3xl">
+                <h3 class="text-lg opacity-75">Active Sessions</h3>
+                <p id="active" class="text-5xl font-bold text-pink-400 mt-2">0</p>
+            </div>
+            <div class="card p-6 rounded-3xl">
+                <h3 class="text-lg opacity-75">Messages / Minute</h3>
+                <p id="mpm" class="text-5xl font-bold text-purple-400 mt-2">0</p>
+            </div>
+            <div class="card p-6 rounded-3xl">
+                <h3 class="text-lg opacity-75">Avg Response Time</h3>
+                <p id="response" class="text-5xl font-bold text-cyan-400 mt-2">0ms</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="card p-6 rounded-3xl">
+                <h3 class="mb-4">Real-time Activity</h3>
+                <canvas id="activityChart"></canvas>
+            </div>
+            <div class="card p-6 rounded-3xl">
+                <h3 class="mb-4">Popular Topics</h3>
+                <div id="topics" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let activityChart;
+        const ws = new WebSocket(`ws://${location.host}/ws/analytics`);
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            document.getElementById('active').textContent = data.active_sessions;
+            document.getElementById('mpm').textContent = data.messages_per_minute;
+            document.getElementById('response').textContent = data.avg_response_time_ms + 'ms';
+        };
+
+        // Initialize Chart
+        window.onload = () => {
+            const ctx = document.getElementById('activityChart');
+            activityChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Messages', data: [], borderColor: '#c300ff' }] },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        };
+    </script>
+</body>
+</html>
