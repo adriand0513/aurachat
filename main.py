@@ -74,6 +74,29 @@ def split_into_bubbles(text: str) -> List[str]:
     return [s.strip() for s in sentences if s.strip()]
 
 # ── Auth Routes ─────────────────────────────────────
+
+@app.get("/")
+async def home():
+    try:
+        # More reliable path handling
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        chat_path = os.path.join(base_dir, "static", "chat.html")
+        
+        with open(chat_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        response = HTMLResponse(content)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+    except Exception as e:
+        logger.error(f"Homepage error: {e}")
+        return HTMLResponse(f"""
+        <h1>Server is running ✅</h1>
+        <p>Error loading chat.html: {str(e)}</p>
+        <p>Check if static/chat.html exists in your project.</p>
+        """, 500)
+
 @app.post("/auth/register")
 async def register(body: dict = Body(...)):
     email = body.get("email")
