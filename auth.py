@@ -38,7 +38,17 @@ def register_user(email: str, password: str, full_name: str):
     email = email.lower().strip()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    
     try:
+        # Safe migration: Add full_name column if it doesn't exist
+        c.execute("PRAGMA table_info(users)")
+        columns = [row[1] for row in c.fetchall()]
+        
+        if "full_name" not in columns:
+            print("Migrating: Adding full_name column to users table...")
+            c.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
+            print("Migration successful")
+
         hashed = get_password_hash(password)
         c.execute('''
             INSERT INTO users (email, hashed_password, full_name)
@@ -48,7 +58,11 @@ def register_user(email: str, password: str, full_name: str):
         logger.info(f"New user registered: {email}")
         return True
     except sqlite3.IntegrityError:
-        return False  # Email already exists
+        logger.warning(f"Registration failed - email already exists: {email}")
+        return False
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        return False
     finally:
         conn.close()
 
