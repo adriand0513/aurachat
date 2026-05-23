@@ -118,7 +118,20 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     token = create_access_token({"sub": str(user["id"])})
     log_event("user_login", user_id=user["id"])
     return {"access_token": token, "token_type": "bearer", "user": user}
-
+    
+    
+    
+@app.get("/api/history")
+async def get_chat_history(user: dict = Depends(get_current_user)):
+    """Return user's persistent chat history"""
+    # Use a stable convo_id per user
+    default_convo_id = f"user_{user['id']}"
+    
+    history = get_history(default_convo_id, limit=200)
+    return {
+        "convo_id": default_convo_id,
+        "messages": history
+    }
 
 # ── Protected Dashboard ─────────────────────────────────────
 @app.get("/dashboard")
