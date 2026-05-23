@@ -1,4 +1,4 @@
-# auth.py - Full User Authentication with Safe Migrations
+# auth.py - Clean & Safe Version
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, ExpiredSignatureError, JWTError
@@ -43,12 +43,12 @@ def register_user(email: str, password: str, full_name: str):
     c = conn.cursor()
     
     try:
-        # Safe migration for full_name column
+        # Ensure full_name column exists
         c.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in c.fetchall()]
         
         if "full_name" not in columns:
-            logger.info("Migrating: Adding full_name column to users table")
+            logger.info("Migrating: Adding full_name column")
             c.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
 
         hashed = get_password_hash(password)
@@ -88,8 +88,7 @@ def authenticate_user(email: str, password: str):
         logger.info(f"Auth failed: No user found for {email}")
         return None
 
-    # hashed_password is at index 2
-    if not verify_password(password, user[2]):
+    if not verify_password(password, user[2]):   # hashed_password is at index 2
         logger.info(f"Auth failed: Wrong password for {email}")
         return None
 
@@ -121,9 +120,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     if user is None:
         raise credentials_exception
-    
+
     return {
-        "id": user[0], 
-        "email": user[1], 
+        "id": user[0],
+        "email": user[1],
         "full_name": user[2] if len(user) > 2 else None
     }
