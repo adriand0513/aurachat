@@ -190,7 +190,7 @@
     <script>
         let token = localStorage.getItem('token');
         let currentUser = null;
-        let convoId = null;   // Now managed by backend
+        let convoId = null; // Now managed by backend
     
         const messagesContainer = document.getElementById('messages');
         const typingContainer = document.getElementById('typing-container');
@@ -313,6 +313,7 @@
             typingContainer.style.display = 'none';
         }
     
+        // Updated sendToBackend with consistent natural pacing
         async function sendToBackend(msg) {
             if (isSending) return;
             isSending = true;
@@ -332,13 +333,15 @@
                 });
     
                 const data = await res.json();
-                if (data.replies) {
+                
+                if (data.replies && data.replies.length > 0) {
                     for (let bubble of data.replies) {
+                        // Consistent delay for every message (feels more natural)
                         await new Promise(resolve => {
                             setTimeout(() => {
                                 addMessage(bubble, 'received');
                                 resolve();
-                            }, 800);
+                            }, 1650 + Math.random() * 950); // 1.65s to 2.6s per bubble
                         });
                     }
                 }
