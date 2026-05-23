@@ -190,8 +190,7 @@
     <script>
         let token = localStorage.getItem('token');
         let currentUser = null;
-        let convoId = localStorage.getItem('convo_id') || 'conv_' + Date.now();
-        localStorage.setItem('convo_id', convoId);
+        let convoId = null;   // Now managed by backend
     
         const messagesContainer = document.getElementById('messages');
         const typingContainer = document.getElementById('typing-container');
@@ -204,8 +203,8 @@
         let isSending = false;
         let responseTimeout = null;
     
-        const USER_TYPING_DELAY = 4500;   // Time to wait after user stops typing
-        const BOT_THINKING_DELAY = 4000;  // Extra thinking time before replying
+        const USER_TYPING_DELAY = 4500;
+        const BOT_THINKING_DELAY = 4000;
     
         function showLogin() {
             document.getElementById('login-form').style.display = 'block';
@@ -217,21 +216,97 @@
             document.getElementById('register-form').style.display = 'block';
         }
     
-        async function register() { /* ... keep your existing register function ... */ }
-        async function login() { /* ... keep your existing login function ... */ }
-        function checkAuth() { /* ... keep your existing checkAuth ... */ }
+        async function register() {
+            const fullName = document.getElementById('reg-fullname').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value.trim();
+            if (!email || !password) return alert("Email and password required");
+    
+            try {
+                const res = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, full_name: fullName })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert("Account created! Please login.");
+                    showLogin();
+                } else {
+                    alert(data.detail || "Registration failed");
+                }
+            } catch(e) {
+                alert("Error during registration");
+            }
+        }
+    
+        async function login() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+    
+            try {
+                const formData = new FormData();
+                formData.append('username', email);
+                formData.append('password', password);
+    
+                const res = await fetch('/auth/login', { method: 'POST', body: formData });
+                const data = await res.json();
+    
+                if (res.ok) {
+                    token = data.access_token;
+                    currentUser = data.user;
+                    localStorage.setItem('token', token);
+                    localStorage.setItem('user', JSON.stringify(currentUser));
+                    
+                    authScreen.style.display = 'none';
+                    chatWrapper.style.display = 'flex';
+                    userInfo.textContent = `Hi, ${currentUser.full_name || currentUser.email}`;
+                    await loadUserHistory();
+                } else {
+                    alert(data.detail || "Login failed");
+                }
+            } catch(e) {
+                alert("Login error");
+            }
+        }
+    
+        async function loadUserHistory() {
+            try {
+                const res = await fetch('/api/history', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                
+                convoId = data.convo_id;
+                localStorage.setItem('convo_id', convoId);
+    
+                messagesContainer.innerHTML = '';
+                data.messages.forEach(m => {
+                    const type = m.role === 'user' ? 'sent' : 'received';
+                    addMessage(m.content, type);
+                });
+                scrollToBottom();
+            } catch(e) {
+                console.error("Failed to load history", e);
+                convoId = `user_${currentUser.id}_${Date.now()}`;
+            }
+        }
     
         function addMessage(text, type) {
             const div = document.createElement('div');
             div.className = `message ${type}`;
             div.textContent = text;
             messagesContainer.appendChild(div);
+            scrollToBottom();
+        }
+    
+        function scrollToBottom() {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     
         function showTyping() {
             typingContainer.style.display = 'block';
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            scrollToBottom();
         }
     
         function hideTyping() {
@@ -276,12 +351,9 @@
         }
     
         function resetTypingTimer(lastMsg) {
-            if (responseTimeout) {
-                clearTimeout(responseTimeout);
-            }
+            if (responseTimeout) clearTimeout(responseTimeout);
     
             responseTimeout = setTimeout(() => {
-                // After user typing delay, add bot thinking delay
                 setTimeout(() => {
                     sendToBackend(lastMsg);
                     responseTimeout = null;
@@ -295,15 +367,12 @@
     
             addMessage(msg, 'sent');
             input.value = '';
-    
             resetTypingTimer(msg);
         }
     
-        // Reset timer while user is typing
+        // Event Listeners
         input.addEventListener('input', () => {
-            if (responseTimeout) {
-                clearTimeout(responseTimeout);
-            }
+            if (responseTimeout) clearTimeout(responseTimeout);
         });
     
         input.addEventListener('keypress', e => {
