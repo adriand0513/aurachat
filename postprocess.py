@@ -1,75 +1,82 @@
+# postprocess.py - Strong AI Language Removal
 import re
 import random
-import logging
 import requests
 from config import XAI_API_KEY, XAI_API_BASE, XAI_MODEL
 
-logger = logging.getLogger(__name__)
-
 def clean_reply(text: str) -> str:
     if not text:
-        return ""
+        return "Hey..."
 
     original = text
     text = text.strip()
 
-    # ── Safety & basic cleanup ─────────────────────────────────────
+    # === Aggressive AI Pattern Removal ===
+    ai_patterns = [
+        r"(?i)as an ai",
+        r"(?i)i'm an ai",
+        r"(?i)language model",
+        r"(?i)I'm a chatbot",
+        r"(?i)as a virtual assistant",
+        r"(?i)I'm grok",
+        r"(?i)artificial intelligence",
+        r"(?i)ai companion",
+        r"(?i)digital entity",
+        r"(?i)I'm not a real person",
+        r"(?i)I'm an artificial",
+        r"(?i)powered by",
+        r"(?i)trained on",
+    ]
+
+    for pattern in ai_patterns:
+        text = re.sub(pattern, "", text)
+
+    # General cleanup
     text = re.sub(r"<\|[^>]*\|>", "", text)
     text = re.sub(r"__.*?__", "", text)
-    text = re.sub(r'(?i)(as (an )?ai|language model|llm|chatbot|bot|grok)', '', text)
     text = re.sub(r'\[.*?]\s*', '', text)
     text = re.sub(r'\*.*?\*', '', text)
-    text = re.sub(r'".*?"', '', text)
-    text = re.sub(r'[-—–]+', ' ', text)
     text = re.sub(r'\s{2,}', ' ', text)
 
-    # ── Try-hard / overly polished cleanup ───────────────────────
-    try_hard_patterns = [
-        r'\bbrain\'s finally powering down\b',
-        r'\bMmm that\'s actually really sweet\b',
-        r'\bthat hits different\b',
-        r'\bthe steady confidence you carry\b',
-        r'\bgot me wanting to skip the usual\b',
+    # Remove overly polished / AI-sounding starters
+    starters = [
+        r"^(Mmm|Hmm|Ahh|Ohh|Well|So|Hey there|Hi there)\s*",
+        r"^I (love|like|appreciate|enjoy|find) ",
+        r"^That's (really|very|quite|so) ",
     ]
-    for pattern in try_hard_patterns:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    for pattern in starters:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
 
-    # ── Very light dynamic humanizing (only when needed) ─────────
-    if len(text) > 135 and random.random() < 0.08:
+    # Light humanizing pass if needed
+    if len(text) > 120 and random.random() < 0.15:
         try:
-            humanize_prompt = f"""Make this reply sound more natural, like a well-mannered suburban Colombian girl texting. 
-Keep her warmth, slight seductive tone, and personality. Change as little as possible.
+            humanize_prompt = f"""Rewrite this message to sound like a real 25-year-old Colombian girl texting casually. 
+Make it warm, slightly seductive, natural, and human. Use contractions. Shorten if possible.
 
 Original: {text}
 
 Natural version:"""
 
-            headers = {"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"}
-            data = {
-                "model": XAI_MODEL,
-                "messages": [{"role": "user", "content": humanize_prompt}],
-                "temperature": 0.75,
-                "max_tokens": 200,
-            }
-            resp = requests.post(XAI_API_BASE, headers=headers, json=data, timeout=6)
+            resp = requests.post(
+                XAI_API_BASE,
+                headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": XAI_MODEL,
+                    "messages": [{"role": "user", "content": humanize_prompt}],
+                    "temperature": 0.75,
+                    "max_tokens": 250
+                },
+                timeout=8
+            )
             if resp.status_code == 200:
                 rewritten = resp.json()["choices"][0]["message"]["content"].strip()
-                if rewritten and 35 < len(rewritten) < len(text) * 1.22:
+                if 30 < len(rewritten) < len(text) * 1.3:
                     text = rewritten
         except:
             pass
 
-    # ── Light question reduction (protect curiosity) ─────────────
-    if random.random() < 0.55 and text.endswith('?'):
-        if random.random() < 0.5:
-            text = text[:-1].strip() + '.'
-
-    # Final cleanup
-    text = re.sub(r'\s*\.\s*', '. ', text)
-    text = text.strip()
-
-    # Very light human touch
-    if random.random() < 0.08 and not text.endswith(('…', '.', '!', '?')):
-        text += random.choice([' …', ' lol'])
+    # Final light touches
+    if random.random() < 0.12 and not text.endswith(('...', '.', '!', '?')):
+        text += random.choice([' …', ' lol', ' haha'])
 
     return text.strip()
