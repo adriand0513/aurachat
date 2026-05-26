@@ -1,4 +1,4 @@
-# postprocess.py - Clean, Natural, and Safe
+# postprocess.py - Balanced & Safe Version
 import re
 import random
 import requests
@@ -10,52 +10,43 @@ def clean_reply(text: str) -> str:
 
     text = text.strip()
 
-    # Remove common AI artifacts
+    # Light cleanup only
     text = re.sub(r"<\|[^>]*\|>", "", text)
     text = re.sub(r"__.*?__", "", text)
     text = re.sub(r'\[.*?]\s*', '', text)
     text = re.sub(r'\*.*?\*', '', text)
-    text = re.sub(r'[-—–]{2,}', ' ', text)      # Remove excessive dashes
+    text = re.sub(r'[-—–]{2,}', ' ', text)   # Remove excessive dashes
     text = re.sub(r'\s{2,}', ' ', text)
 
-    # Remove dangerous or AI-revealing starters
+    # Remove common AI starters
     text = re.sub(r"^(Mmm|Hmm|Ahh|Ohh|Well|So|Hey there)\s*", "", text, flags=re.IGNORECASE)
 
-    # Smart LLM Safety + Humanizing Pass
-    try:
-        safety_prompt = f"""Rewrite this message from Isabella to be natural, classy, seductive, and human.
-
-Rules:
-- Never mention being an AI, chatbot, or virtual anything.
-- Never offer calls, meetings, or real-life contact.
-- Keep her warm, slightly flirty, and real.
-- Remove any awkward phrasing or instructions.
+    # Very light humanizing (only when needed)
+    if len(text) > 100 and random.random() < 0.12:
+        try:
+            humanize_prompt = f"""Rewrite this reply to sound like a real 25-year-old girl texting casually. 
+Keep it warm, natural, slightly seductive. Do not add any prefixes or explanations.
 
 Original: {text}
 
-Just return the clean, natural version:"""
+Natural version:"""
 
-        resp = requests.post(
-            XAI_API_BASE,
-            headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": XAI_MODEL,
-                "messages": [{"role": "user", "content": safety_prompt}],
-                "temperature": 0.7,
-                "max_tokens": 280
-            },
-            timeout=8
-        )
-
-        if resp.status_code == 200:
-            rewritten = resp.json()["choices"][0]["message"]["content"].strip()
-            if 20 < len(rewritten) < len(text) * 1.35:
-                text = rewritten
-    except:
-        pass  # Fail silently, use original text
-
-    # Light human touch
-    if random.random() < 0.15 and not text.endswith(('...', '.', '!', '?')):
-        text += random.choice([' …', ' haha'])
+            resp = requests.post(
+                XAI_API_BASE,
+                headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": XAI_MODEL,
+                    "messages": [{"role": "user", "content": humanize_prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 250
+                },
+                timeout=7
+            )
+            if resp.status_code == 200:
+                rewritten = resp.json()["choices"][0]["message"]["content"].strip()
+                if 25 < len(rewritten) < len(text) * 1.25:
+                    text = rewritten
+        except:
+            pass
 
     return text.strip()
