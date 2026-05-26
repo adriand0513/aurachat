@@ -1,7 +1,7 @@
-# auth.py - Clean & Safe Version
+# auth.py - Fixed & Debuggable Login
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import jwt, ExpiredSignatureError, JWTError
+from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -41,14 +41,11 @@ def register_user(email: str, password: str, full_name: str):
     email = email.lower().strip()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
     try:
         # Ensure full_name column exists
         c.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in c.fetchall()]
-        
         if "full_name" not in columns:
-            logger.info("Migrating: Adding full_name column")
             c.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
 
         hashed = get_password_hash(password)
@@ -56,15 +53,14 @@ def register_user(email: str, password: str, full_name: str):
             INSERT INTO users (email, hashed_password, full_name)
             VALUES (?, ?, ?)
         ''', (email, hashed, full_name))
-        
         conn.commit()
-        logger.info(f"✅ New user registered: {email}")
+        logger.info(f"✅ Registered: {email}")
         return True
     except sqlite3.IntegrityError:
         logger.warning(f"Email already exists: {email}")
         return False
     except Exception as e:
-        logger.error(f"Registration error: {e}")
+        logger.error(f"Register error: {e}")
         return False
     finally:
         conn.close()
@@ -75,24 +71,23 @@ def authenticate_user(email: str, password: str):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    c.execute("""
-        SELECT id, email, hashed_password, full_name 
-        FROM users 
-        WHERE email = ?
-    """, (email,))
-    
+    # Get all columns for debugging
+    c.execute("SELECT id, email, hashed_password, full_name FROM users WHERE email = ?", (email,))
     user = c.fetchone()
     conn.close()
 
     if not user:
-        logger.info(f"Auth failed: No user found for {email}")
+        logger.info(f"Login failed: User not found - {email}")
         return None
 
-    if not verify_password(password, user[2]):   # hashed_password is at index 2
-        logger.info(f"Auth failed: Wrong password for {email}")
+    # Debug info
+    logger.info(f"User found: id={user[0]}, email={user[1]}, has hashed_password: {bool(user[2])}")
+
+    if not verify_password(password, user[2]):
+        logger.info(f"Login failed: Wrong password for {email}")
         return None
 
-    logger.info(f"✅ Auth success for {email}")
+    logger.info(f"✅ Login successful: {email}")
     return {
         "id": user[0],
         "email": user[1],
@@ -117,7 +112,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     c.execute("SELECT id, email, full_name FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     conn.close()
-    
+
     if user is None:
         raise credentials_exception
 
