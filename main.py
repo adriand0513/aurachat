@@ -76,6 +76,25 @@ def split_into_bubbles(text: str) -> List[str]:
 # ── Live Monitor Connections ─────────────────────────────
 monitor_connections = []
 
+# ── ROOT ROUTE (Homepage) ─────────────────────────────────────
+@app.get("/")
+async def home():
+    """Serve the main chat page"""
+    try:
+        with open("static/chat.html", "r", encoding="utf-8") as f:
+            content = f.read()
+        response = HTMLResponse(content)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+    except Exception as e:
+        logger.error(f"Homepage error: {e}")
+        return HTMLResponse(f"""
+        <h1 style="color:white;">Server is running ✅</h1>
+        <h2 style="color:red;">Could not load chat.html</h2>
+        <p>Error: {str(e)}</p>
+        <p>Make sure <strong>static/chat.html</strong> exists in your project.</p>
+        """, 500)
+
 # ── Auth Routes ─────────────────────────────────────
 @app.post("/auth/register")
 async def register(body: dict = Body(...)):
@@ -107,19 +126,14 @@ async def get_chat_history(user: dict = Depends(get_current_user)):
 # ── Live Monitor Page ─────────────────────────────────────
 @app.get("/monitor")
 async def chat_monitor(token: str = None):
-    """Live Chat Monitor Page"""
     if token != ADMIN_TOKEN:
-        raise HTTPException(403, "Unauthorized - Invalid admin token")
-    
+        raise HTTPException(403, "Unauthorized")
     try:
         with open("static/monitor.html", "r", encoding="utf-8") as f:
-            content = f.read()
-        response = HTMLResponse(content)
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return response
+            return HTMLResponse(f.read())
     except Exception as e:
         logger.error(f"Monitor page error: {e}")
-        return HTMLResponse("<h1>Monitor page not found. Make sure monitor.html exists in /static/</h1>", 404)
+        return HTMLResponse("<h1>Monitor page not found</h1>", 404)
 
 # ── Protected Dashboard ─────────────────────────────────────
 @app.get("/dashboard")
