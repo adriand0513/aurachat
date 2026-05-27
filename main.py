@@ -126,7 +126,6 @@ async def get_chat_history(user: dict = Depends(get_current_user)):
 # ── Admin All Chats (Live + Past) ─────────────────────────────────────
 @app.get("/api/admin/chats")
 async def admin_all_chats(token: str = None):
-    """Return both active and past conversations"""
     if token != ADMIN_TOKEN:
         raise HTTPException(403, "Unauthorized")
     
@@ -155,7 +154,7 @@ async def admin_all_chats(token: str = None):
                 "email": row[0],
                 "convo_id": row[1],
                 "last_message_at": row[2],
-                "last_message": (row[3] or "")[:120],
+                "last_message": (row[3] or "")[:150],
                 "message_count": row[4]
             })
         
@@ -219,14 +218,14 @@ async def monitor_websocket(websocket: WebSocket, token: str = None):
 
     try:
         while True:
-            active_chats = []
+            # For now, return empty - we'll improve this in Option B
             await websocket.send_json({
                 "type": "live_update",
-                "active_chats": active_chats,
-                "total_active": len(active_chats),
+                "active_chats": [],
+                "total_active": 0,
                 "timestamp": datetime.now().isoformat()
             })
-            await asyncio.sleep(4)
+            await asyncio.sleep(5)
     except WebSocketDisconnect:
         if websocket in monitor_connections:
             monitor_connections.remove(websocket)
