@@ -203,7 +203,6 @@
         let token = localStorage.getItem('token');
         let currentUser = null;
         let convoId = null;
-
         const messagesContainer = document.getElementById('messages');
         const typingContainer = document.getElementById('typing-container');
         const input = document.getElementById('user-input');
@@ -212,14 +211,14 @@
         const chatWrapper = document.getElementById('chat-wrapper');
         const userInfo = document.getElementById('user-info');
         const offlineMessage = document.getElementById('offline-message');
-
+        
         let isSending = false;
         let responseTimeout = null;
-
         const USER_TYPING_DELAY = 4500;
         const BOT_THINKING_DELAY = 4000;
-
-        // Availability: 5 PM - 2 AM ET
+    
+        // ==================== AVAILABILITY CODE COMMENTED OUT ====================
+        /*
         function isIsabellaAvailable() {
             const now = new Date();
             const nyFormatter = new Intl.DateTimeFormat('en-US', {
@@ -230,7 +229,7 @@
             const hour = parseInt(nyFormatter.format(now));
             return (hour >= 17) || (hour < 2);
         }
-
+    
         function updateAvailability() {
             const available = isIsabellaAvailable();
             if (available) {
@@ -244,23 +243,24 @@
                 if (responseTimeout) clearTimeout(responseTimeout);
             }
         }
-
+        */
+        // =====================================================================
+    
         function showLogin() {
             document.getElementById('login-form').style.display = 'block';
             document.getElementById('register-form').style.display = 'none';
         }
-
+    
         function showRegister() {
             document.getElementById('login-form').style.display = 'none';
             document.getElementById('register-form').style.display = 'block';
         }
-
+    
         async function register() {
             const fullName = document.getElementById('reg-fullname').value.trim();
             const email = document.getElementById('reg-email').value.trim();
             const password = document.getElementById('reg-password').value.trim();
             if (!email || !password) return alert("Email and password required");
-
             try {
                 const res = await fetch('/auth/register', {
                     method: 'POST',
@@ -278,30 +278,27 @@
                 alert("Error during registration");
             }
         }
-
+    
         async function login() {
             const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value.trim();
-
             try {
                 const formData = new FormData();
                 formData.append('username', email);
                 formData.append('password', password);
-
                 const res = await fetch('/auth/login', { method: 'POST', body: formData });
                 const data = await res.json();
-
                 if (res.ok) {
                     token = data.access_token;
                     currentUser = data.user;
                     localStorage.setItem('token', token);
                     localStorage.setItem('user', JSON.stringify(currentUser));
-                    
+                   
                     authScreen.style.display = 'none';
                     chatWrapper.style.display = 'flex';
                     userInfo.textContent = `Hi, ${currentUser.full_name || currentUser.email}`;
                     await loadUserHistory();
-                    updateAvailability();
+                    // updateAvailability();   // Commented out
                 } else {
                     alert(data.detail || "Login failed");
                 }
@@ -309,17 +306,16 @@
                 alert("Login error");
             }
         }
-
+    
         async function loadUserHistory() {
             try {
                 const res = await fetch('/api/history', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
-                
+               
                 convoId = data.convo_id;
                 localStorage.setItem('convo_id', convoId);
-
                 messagesContainer.innerHTML = '';
                 data.messages.forEach(m => {
                     const type = m.role === 'user' ? 'sent' : 'received';
@@ -331,7 +327,7 @@
                 convoId = `user_${currentUser.id}_${Date.now()}`;
             }
         }
-
+    
         function addMessage(text, type) {
             const div = document.createElement('div');
             div.className = `message ${type}`;
@@ -339,38 +335,36 @@
             messagesContainer.appendChild(div);
             scrollToBottom();
         }
-
+    
         function scrollToBottom() {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
-
+    
         function showTyping() {
             typingContainer.style.display = 'block';
             scrollToBottom();
         }
-
+    
         function hideTyping() {
             typingContainer.style.display = 'none';
         }
-
+    
         async function sendToBackend(msg) {
-            if (isSending || !isIsabellaAvailable()) return;
+            if (isSending) return;   // Availability check removed
             isSending = true;
             showTyping();
-
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ 
-                        convo_id: convoId, 
-                        message: msg 
+                    body: JSON.stringify({
+                        convo_id: convoId,
+                        message: msg
                     })
                 });
-
                 const data = await res.json();
                 if (data.replies && data.replies.length > 0) {
                     for (let bubble of data.replies) {
@@ -389,10 +383,9 @@
                 isSending = false;
             }
         }
-
+    
         function resetTypingTimer(lastMsg) {
             if (responseTimeout) clearTimeout(responseTimeout);
-
             responseTimeout = setTimeout(() => {
                 setTimeout(() => {
                     sendToBackend(lastMsg);
@@ -400,36 +393,34 @@
                 }, BOT_THINKING_DELAY);
             }, USER_TYPING_DELAY);
         }
-
+    
         function sendMessage() {
-            if (!isIsabellaAvailable()) return;
             const msg = input.value.trim();
             if (!msg || isSending) return;
-
             addMessage(msg, 'sent');
             input.value = '';
             resetTypingTimer(msg);
         }
-
+    
         // Event Listeners
         input.addEventListener('input', () => {
             if (responseTimeout) clearTimeout(responseTimeout);
         });
-
+    
         input.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
         });
-
+    
         sendBtn.addEventListener('click', sendMessage);
-
+    
         // Initialize
         window.addEventListener('load', () => {
             checkAuth();
-            updateAvailability();
-            setInterval(updateAvailability, 30000); // Check every 30 seconds
+            // updateAvailability();           // Commented out
+            // setInterval(updateAvailability, 30000); // Commented out
         });
     </script>
 </body>
