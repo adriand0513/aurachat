@@ -1,4 +1,4 @@
-# main.py - Isabella Chatbot (Final with Live Monitor)
+# main.py - Isabella Chatbot (Final with Live Monitor + Past Chats)
 import os
 import re
 import time
@@ -26,7 +26,7 @@ load_dotenv()
 # Import modules
 from config import (
     XAI_API_KEY, XAI_API_BASE, XAI_MODEL,
-    XAI_TEMPERATURE, XAI_MAX_TOKENS, ADMIN_TOKEN
+    XAI_TEMPERATURE, XAI_MAX_TOKENS, ADMIN_TOKEN, DB_PATH
 )
 from prompt import get_system_prompt
 from postprocess import clean_reply
@@ -123,6 +123,48 @@ async def get_chat_history(user: dict = Depends(get_current_user)):
     history = get_history(default_convo_id, limit=200)
     return {"convo_id": default_convo_id, "messages": history}
 
+# ── Admin All Chats (Live + Past) ─────────────────────────────────────
+@app.get("/api/admin/chats")
+async def admin_all_chats(token: str = None):
+    """Return both active and past conversations"""
+    if token != ADMIN_TOKEN:
+        raise HTTPException(403, "Unauthorized")
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        c.execute('''
+            SELECT 
+                u.email,
+                ch.convo_id,
+                MAX(ch.timestamp) as last_message_at,
+                (SELECT content FROM chat_history 
+                 WHERE convo_id = ch.convo_id 
+                 ORDER BY timestamp DESC LIMIT 1) as last_message,
+                COUNT(*) as message_count
+            FROM users u
+            JOIN chat_history ch ON ch.user_id = u.id
+            GROUP BY u.email, ch.convo_id
+            ORDER BY last_message_at DESC
+        ''')
+        
+        chats = []
+        for row in c.fetchall():
+            chats.append({
+                "email": row[0],
+                "convo_id": row[1],
+                "last_message_at": row[2],
+                "last_message": (row[3] or "")[:120],
+                "message_count": row[4]
+            })
+        
+        conn.close()
+        return {"chats": chats}
+    except Exception as e:
+        logger.error(f"Admin chats error: {e}")
+        return {"chats": []}
+
 # ── Live Monitor Page ─────────────────────────────────────
 @app.get("/monitor")
 async def chat_monitor(token: str = None):
@@ -134,43 +176,6 @@ async def chat_monitor(token: str = None):
     except Exception as e:
         logger.error(f"Monitor page error: {e}")
         return HTMLResponse("<h1>Monitor page not found</h1>", 404)
-
-@app.get("/api/admin/chats")
-async def admin_all_chats(token: str = None):
-    """Return both active and past conversations"""
-    if token != ADMIN_TOKEN:
-        raise HTTPException(403, "Unauthorized")
-    
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    c.execute('''
-        SELECT 
-            u.email,
-            ch.convo_id,
-            MAX(ch.timestamp) as last_message_at,
-            (SELECT content FROM chat_history 
-             WHERE convo_id = ch.convo_id 
-             ORDER BY timestamp DESC LIMIT 1) as last_message,
-            COUNT(*) as message_count
-        FROM users u
-        JOIN chat_history ch ON ch.user_id = u.id
-        GROUP BY u.email, ch.convo_id
-        ORDER BY last_message_at DESC
-    ''')
-    
-    chats = []
-    for row in c.fetchall():
-        chats.append({
-            "email": row[0],
-            "convo_id": row[1],
-            "last_message_at": row[2],
-            "last_message": row[3][:120] if row[3] else "",
-            "message_count": row[4]
-        })
-    
-    conn.close()
-    return {"chats": chats}
 
 # ── Protected Dashboard ─────────────────────────────────────
 @app.get("/dashboard")
@@ -207,16 +212,14 @@ async def monitor_websocket(websocket: WebSocket, token: str = None):
     if token != ADMIN_TOKEN:
         await websocket.close(code=1008)
         return
-    
+   
     await websocket.accept()
     monitor_connections.append(websocket)
     logger.info("🔴 Live Monitor connected")
 
     try:
         while True:
-            # Send current active conversations
             active_chats = []
-            # You can expand this later with real data
             await websocket.send_json({
                 "type": "live_update",
                 "active_chats": active_chats,
@@ -225,7 +228,8 @@ async def monitor_websocket(websocket: WebSocket, token: str = None):
             })
             await asyncio.sleep(4)
     except WebSocketDisconnect:
-        monitor_connections.remove(websocket)
+        if websocket in monitor_connections:
+            monitor_connections.remove(websocket)
         logger.info("Live Monitor disconnected")
     except Exception as e:
         logger.error(f"Monitor WebSocket error: {e}")
@@ -234,7 +238,7 @@ async def monitor_websocket(websocket: WebSocket, token: str = None):
 @app.post("/api/reply")
 async def generate_reply(body: dict = Body(...), user: dict = Depends(get_current_user)):
     start_time = time.time()
-   
+  
     convo_id = body.get("convo_id")
     user_message = body.get("message", "").strip()
     logger.info(f"📥 /api/reply | user={user['id']} | convo={convo_id} | msg='{user_message[:80]}'")
@@ -268,7 +272,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         messages = [{"role": "system", "content": system_prompt}] + history[-12:]
         # === Retry Logic (Safe) ===
         raw_reply = None
-        for attempt in range(2): # Max 2 attempts
+        for attempt in range(2):
             try:
                 resp = requests.post(
                     XAI_API_BASE,
@@ -283,7 +287,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 )
                 resp.raise_for_status()
                 raw_reply = resp.json()["choices"][0]["message"]["content"].strip()
-                break # Success
+                break
             except Exception as e:
                 if attempt == 0:
                     logger.warning(f"xAI API failed (attempt 1/2), retrying in 2.5s...")
@@ -292,7 +296,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 else:
                     logger.error(f"xAI API failed after 2 attempts: {e}")
                     log_event("xai_api_error", convo_id, user_id=user["id"], metadata={"error": str(e)})
-                    return {"replies": []} # Silent failure
+                    return {"replies": []}
         # Process successful reply
         bubbles = split_into_bubbles(clean_reply(raw_reply))
         for bubble in bubbles:
@@ -304,7 +308,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     except Exception as e:
         logger.error(f"💥 Unexpected error: {e}", exc_info=True)
         log_event("error", convo_id, user_id=user["id"], metadata={"error": str(e)})
-        return {"replies": []} # Silent failure
+        return {"replies": []}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
