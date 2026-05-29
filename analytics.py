@@ -49,11 +49,11 @@ def log_event(event_type: str, convo_id: str = None, user_id: int = None,
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Fix: Convert any datetime objects to string for JSON
+        # Safe metadata handling
         if metadata:
             safe_metadata = {}
             for key, value in metadata.items():
-                if hasattr(value, 'isoformat'):  # datetime object
+                if hasattr(value, 'isoformat'):  # datetime
                     safe_metadata[key] = value.isoformat()
                 else:
                     safe_metadata[key] = value
