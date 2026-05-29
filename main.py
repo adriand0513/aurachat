@@ -19,7 +19,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
 
-# Custom JSON Encoder to fix datetime serialization
+# Custom JSON Encoder
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -48,7 +48,7 @@ from archetype import detect_archetype
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 
-# Use custom JSON encoder
+# IMPORTANT: Use custom encoder
 app = FastAPI(title="Isabella Chatbot")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
