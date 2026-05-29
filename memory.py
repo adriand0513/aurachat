@@ -137,7 +137,7 @@ def get_pet_name(convo_id: str) -> str:
     row = cur.fetchone()
     cur.close()
     conn.close()
-    return row[0] if row and row[0] else "babe"
+    return row[0] if row and row[0] else "papi"
 
 
 def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
