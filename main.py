@@ -1,4 +1,4 @@
-# main.py - Isabella Chatbot (PostgreSQL + Strong JSON Fix)
+# main.py - Isabella Chatbot (PostgreSQL + Strong Global JSON Fix)
 import os
 import re
 import time
@@ -19,7 +19,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
 
-# ==================== GLOBAL DATETIME FIX ====================
+# ==================== STRONG GLOBAL DATETIME FIX ====================
 class DateTimeJSONResponse(JSONResponse):
     def render(self, content: any) -> bytes:
         def custom_serializer(obj):
@@ -55,6 +55,7 @@ from archetype import detect_archetype
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 
+# Use the strong custom response class
 app = FastAPI(title="Isabella Chatbot", default_response_class=DateTimeJSONResponse)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
