@@ -350,9 +350,11 @@
         }
     
         async function sendToBackend(msg) {
-            if (isSending) return;   // Availability check removed
+            if (isSending) return;
             isSending = true;
+            isBotReplying = true;
             showTyping();
+    
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
@@ -365,7 +367,9 @@
                         message: msg
                     })
                 });
+    
                 const data = await res.json();
+    
                 if (data.replies && data.replies.length > 0) {
                     for (let bubble of data.replies) {
                         await new Promise(resolve => {
@@ -378,14 +382,17 @@
                 }
             } catch (err) {
                 console.error(err);
+                addMessage("Sorry, something went wrong...", 'received');
             } finally {
                 hideTyping();
                 isSending = false;
+                isBotReplying = false;
             }
         }
     
         function resetTypingTimer(lastMsg) {
             if (responseTimeout) clearTimeout(responseTimeout);
+    
             responseTimeout = setTimeout(() => {
                 setTimeout(() => {
                     sendToBackend(lastMsg);
@@ -396,7 +403,9 @@
     
         function sendMessage() {
             const msg = input.value.trim();
-            if (!msg || isSending) return;
+            if (!msg) return;
+    
+            // Allow sending even while bot is replying
             addMessage(msg, 'sent');
             input.value = '';
             resetTypingTimer(msg);
