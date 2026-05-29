@@ -1,4 +1,4 @@
-# analytics.py - PostgreSQL Version (Fixed JSON Serialization)
+# analytics.py - PostgreSQL Version (Full Features + Safe JSON)
 import psycopg2
 import json
 from datetime import datetime
@@ -29,7 +29,7 @@ def ensure_analytics_table():
         cur.execute('CREATE INDEX IF NOT EXISTS idx_analytics_convo ON analytics_events(convo_id)')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_analytics_user ON analytics_events(user_id)')
         conn.commit()
-        print("✅ Analytics table ensured in PostgreSQL")
+        print("✅ Analytics table ensured")
     except Exception as e:
         print(f"Warning: Could not ensure analytics table: {e}")
     finally:
@@ -43,17 +43,16 @@ ensure_analytics_table()
 
 def log_event(event_type: str, convo_id: str = None, user_id: int = None,
               metadata: dict = None, duration_ms: int = None):
-    """Log any analytics event - Safe for JSON"""
+    """Safe log_event for PostgreSQL"""
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Safe metadata handling
         if metadata:
             safe_metadata = {}
             for key, value in metadata.items():
-                if hasattr(value, 'isoformat'):  # datetime
+                if hasattr(value, 'isoformat'):
                     safe_metadata[key] = value.isoformat()
                 else:
                     safe_metadata[key] = value
@@ -80,11 +79,11 @@ def log_event(event_type: str, convo_id: str = None, user_id: int = None,
 
 
 def get_live_stats():
-    """Main dashboard stats with retention & engagement"""
+    """Full dashboard stats"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Total Registered Users
+    # Total Users
     cur.execute("SELECT COUNT(*) FROM users")
     total_users = cur.fetchone()[0] or 0
 
@@ -92,7 +91,7 @@ def get_live_stats():
     cur.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = CURRENT_DATE")
     daily_signups = cur.fetchone()[0] or 0
 
-    # Active Users (last 24h)
+    # Active Users (24h)
     cur.execute('''
         SELECT COUNT(DISTINCT user_id)
         FROM analytics_events
@@ -120,7 +119,7 @@ def get_live_stats():
     ''')
     avg_response = round(cur.fetchone()[0] or 0)
 
-    # Retention Rate (7-day)
+    # Retention Rate (7 days)
     cur.execute('''
         SELECT COUNT(DISTINCT user_id)
         FROM analytics_events
