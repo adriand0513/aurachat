@@ -143,7 +143,7 @@ def get_pet_name(convo_id: str) -> str:
     c.execute('SELECT pet_name FROM relationship_state WHERE convo_id = ?', (convo_id,))
     row = c.fetchone()
     conn.close()
-    return row[0] if row and row[0] else "babe"
+    return row[0] if row and row[0] else "papi"
 
 
 def update_relationship(convo_id: str, delta: int = 1, pet_name: Optional[str] = None, note: Optional[str] = None):
