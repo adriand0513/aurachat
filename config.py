@@ -2,9 +2,12 @@
 from dotenv import load_dotenv
 import os
 
-load_dotenv()  # moved up so it's always called first
+load_dotenv()  # Always load first
 
-# ── Database ────────────────────────────────────────────────────────────────
+# ── Database (PostgreSQL) ─────────────────────────────────────────────────────
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Fallback for local development (SQLite)
 DB_PATH = os.getenv("DB_PATH", "users.db")
 
 # ── ElevenLabs ──────────────────────────────────────────────────────────────
@@ -26,7 +29,7 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Email verification (Resend recommended)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://aurachat.it.com")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://www.aurorasparq.com")
 
 # ── Critical checks ─────────────────────────────────────────────────────────
 missing = []
@@ -34,11 +37,10 @@ if not XAI_API_KEY:
     missing.append("XAI_API_KEY")
 if not JWT_SECRET:
     missing.append("JWT_SECRET")
-# Optional but strongly recommended for production
-if not RESEND_API_KEY:
-    print("WARNING: RESEND_API_KEY missing → email verification will not send emails")
-if not PUBLIC_BASE_URL.startswith(("http://", "https://")):
-    print("WARNING: PUBLIC_BASE_URL should start with http:// or https://")
+if not DATABASE_URL:
+    print("⚠️  DATABASE_URL is missing - using SQLite fallback")
+else:
+    print("✅ PostgreSQL DATABASE_URL loaded")
 
 if missing:
     raise ValueError(f"Missing required environment variables: {', '.join(missing)}. "
@@ -48,3 +50,4 @@ print("Config loaded successfully.")
 print(f"JWT_SECRET present: {bool(JWT_SECRET)}")
 print(f"RESEND_API_KEY present: {bool(RESEND_API_KEY)}")
 print(f"PUBLIC_BASE_URL: {PUBLIC_BASE_URL}")
+print(f"Using Database: {'PostgreSQL' if DATABASE_URL else 'SQLite (fallback)'}")
