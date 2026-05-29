@@ -1,4 +1,4 @@
-# main.py - Isabella Chatbot (PostgreSQL Version - Fixed)
+# main.py - Isabella Chatbot (PostgreSQL + JSON Fix)
 import os
 import re
 import time
@@ -10,6 +10,7 @@ import requests
 from dotenv import load_dotenv
 from typing import Dict, List
 from collections import defaultdict
+import json
 
 from fastapi import FastAPI, HTTPException, Body, WebSocket, WebSocketDisconnect, Depends, status
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -17,7 +18,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
-import json
+
+# Custom JSON Encoder to handle datetime objects
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -191,7 +198,7 @@ async def admin_dashboard(token: str = None):
         logger.error(f"Dashboard error: {e}")
         return HTMLResponse("<h1>Dashboard not found</h1>", 404)
 
-# ── Analytics WebSocket ─────────────────────────────────────
+# ── Analytics & Monitor WebSockets (unchanged for now)
 @app.websocket("/ws/analytics")
 async def analytics_websocket(websocket: WebSocket, token: str = None):
     if token != ADMIN_TOKEN:
@@ -208,7 +215,6 @@ async def analytics_websocket(websocket: WebSocket, token: str = None):
     except Exception as e:
         logger.error(f"Analytics WebSocket error: {e}")
 
-# ── Live Monitor WebSocket ─────────────────────────────────────
 @app.websocket("/ws/monitor")
 async def monitor_websocket(websocket: WebSocket, token: str = None):
     if token != ADMIN_TOKEN:
@@ -275,7 +281,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         messages = [{"role": "system", "content": system_prompt}] + history[-12:]
 
-        # Retry Logic
         raw_reply = None
         for attempt in range(2):
             try:
