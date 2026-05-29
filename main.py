@@ -1,4 +1,4 @@
-# main.py - Isabella Chatbot (PostgreSQL + Fixed JSON Encoder)
+# main.py - Isabella Chatbot (PostgreSQL + Strong JSON Fix)
 import os
 import re
 import time
@@ -19,12 +19,19 @@ from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
 
-# Custom JSON Encoder
-class DateTimeEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return super().default(obj)
+# ==================== GLOBAL DATETIME FIX ====================
+class DateTimeJSONResponse(JSONResponse):
+    def render(self, content: any) -> bytes:
+        def custom_serializer(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+        
+        return json.dumps(
+            content, 
+            default=custom_serializer,
+            ensure_ascii=False
+        ).encode("utf-8")
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -48,8 +55,7 @@ from archetype import detect_archetype
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 
-# IMPORTANT: Use custom encoder
-app = FastAPI(title="Isabella Chatbot")
+app = FastAPI(title="Isabella Chatbot", default_response_class=DateTimeJSONResponse)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ── Guards ─────────────────────────────────────
