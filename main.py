@@ -1,4 +1,4 @@
-# main.py - Isabella Chatbot (PostgreSQL Version)
+# main.py - Isabella Chatbot (PostgreSQL Version - Fixed)
 import os
 import re
 import time
@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
+import json
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -73,9 +74,6 @@ def split_into_bubbles(text: str) -> List[str]:
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     return [s.strip() for s in sentences if s.strip()]
 
-# ── Live Monitor Connections ─────────────────────────────
-monitor_connections = []
-
 # ── ROOT ROUTE ─────────────────────────────────────
 @app.get("/")
 async def home():
@@ -117,7 +115,7 @@ async def get_chat_history(user: dict = Depends(get_current_user)):
     history = get_history(default_convo_id, limit=200)
     return {"convo_id": default_convo_id, "messages": history}
 
-# ── Admin All Past Chats (with messages) ─────────────────────────────────────
+# ── Admin All Past Chats ─────────────────────────────────────
 @app.get("/api/admin/chats")
 async def admin_all_chats(token: str = None):
     if token != ADMIN_TOKEN:
@@ -152,12 +150,12 @@ async def admin_all_chats(token: str = None):
                 LIMIT 12
             ''', (convo_id,))
             
-            messages = [{"role": m[0], "content": m[1], "time": m[2]} for m in cur.fetchall()]
+            messages = [{"role": m[0], "content": m[1], "time": str(m[2])} for m in cur.fetchall()]
             
             chats.append({
                 "email": email,
                 "convo_id": convo_id,
-                "last_message_at": row[2],
+                "last_message_at": str(row[2]),
                 "message_count": row[3],
                 "messages": list(reversed(messages))
             })
@@ -242,11 +240,12 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     convo_id = body.get("convo_id")
     user_message = body.get("message", "").strip()
     
-    logger.info(f"📥 /api/reply | user={user['id']} | convo={convo_id} | msg='{user_message[:80]}'")
+    logger.info(f"📥 /api/reply | user={user.get('id')} | convo={convo_id} | msg='{user_message[:80]}'")
     if not convo_id:
         raise HTTPException(400, "convo_id required")
 
-    if now := time.time() - last_reply_time.get(convo_id, 0) < REPLY_COOLDOWN_SECONDS:
+    now = time.time()
+    if now - last_reply_time.get(convo_id, 0) < REPLY_COOLDOWN_SECONDS:
         return JSONResponse({"replies": []}, status_code=200)
     last_reply_time[convo_id] = now
 
@@ -255,7 +254,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
     try:
         if user_message:
-            save_message(convo_id, {"role": "user", "content": user_message}, user_id=user["id"])
+            save_message(convo_id, {"role": "user", "content": user_message}, user_id=user.get("id"))
         
         history = get_history(convo_id)
         context = get_nyc_context()
@@ -305,10 +304,10 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         bubbles = split_into_bubbles(clean_reply(raw_reply))
         for bubble in bubbles:
-            save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user["id"])
+            save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user.get("id"))
 
         duration_ms = int((time.time() - start_time) * 1000)
-        log_event("response_generated", convo_id, user_id=user["id"], duration_ms=duration_ms)
+        log_event("response_generated", convo_id, user_id=user.get("id"), duration_ms=duration_ms)
         
         return {"replies": bubbles}
     except Exception as e:
