@@ -53,8 +53,8 @@ from auth import register_user, authenticate_user, create_access_token, get_curr
 from archetype import detect_archetype
 
 from relationship_state import (
-    get_relationship_state, 
-    update_relationship_state, 
+    get_relationship_state,
+    update_relationship_state,
     add_narrative_moment
 )
 
@@ -297,7 +297,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         # Get NYC context
         context = get_nyc_context()
 
-        # === Build System Prompt with State ===
+        # === Build System Prompt with Full State ===
         system_prompt = get_system_prompt(
             user_name=user.get("full_name"),
             current_time=context.get("time", ""),
@@ -307,8 +307,8 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         # Add relevant facts and relationship info
         relevant_facts = get_relevant_facts(convo_id, limit=5)
-        rel_level = get_relationship_level(convo_id)  # from relationship_state
-        pet_name = get_pet_name(convo_id)
+        rel_level = state.get("level", 1) if state else 1
+        pet_name = state.get("pet_name") if state else None
 
         if relevant_facts:
             system_prompt += f"\n\nKey facts about him: {' | '.join(relevant_facts[:4])}"
@@ -354,7 +354,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         duration_ms = int((time.time() - start_time) * 1000)
         log_event("response_generated", convo_id, user_id=user.get("id"), duration_ms=duration_ms)
 
-        # === Update Relationship State for Longevity ===
+        # === Update Unified State for Longevity ===
         emotional_delta = 1 if any(word in user_message.lower() for word in ["miss", "want", "love", "beautiful", "hot", "sexy"]) else 0
         
         update_relationship_state(
@@ -364,7 +364,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             note=f"User said: {user_message[:120]}"
         )
 
-        # Add narrative moment
+        # Add narrative moment for important exchanges
         if len(user_message) > 25:
             add_narrative_moment(
                 convo_id, 
