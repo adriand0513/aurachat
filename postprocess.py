@@ -3,11 +3,6 @@ import re
 import random
 import requests
 from config import XAI_API_KEY, XAI_API_BASE, XAI_MODEL
-# postprocess.py - Balanced & Safe Version
-import re
-import random
-import requests
-from config import XAI_API_KEY, XAI_API_BASE, XAI_MODEL
 
 def clean_reply(text: str) -> str:
     if not text:
@@ -15,13 +10,15 @@ def clean_reply(text: str) -> str:
 
     text = text.strip()
 
-    # Light cleanup only
+    # === STRONG DASH REMOVAL ===
+    text = re.sub(r'[-—–]', ' ', text)           # Replace all types of dashes with space
+    text = re.sub(r'\s{2,}', ' ', text)          # Clean up extra spaces created by dash removal
+
+    # Light cleanup
     text = re.sub(r"<\|[^>]*\|>", "", text)
     text = re.sub(r"__.*?__", "", text)
     text = re.sub(r'\[.*?]\s*', '', text)
     text = re.sub(r'\*.*?\*', '', text)
-    text = re.sub(r'[-—–]{2,}', ' ', text)   # Remove excessive dashes
-    text = re.sub(r'\s{2,}', ' ', text)
 
     # Remove common AI starters
     text = re.sub(r"^(Mmm|Hmm|Ahh|Ohh|Well|So|Hey there)\s*", "", text, flags=re.IGNORECASE)
