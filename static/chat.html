@@ -218,7 +218,7 @@
         const BOT_THINKING_DELAY = 4000;
     
         // ==================== AVAILABILITY CODE COMMENTED OUT ====================
-        /*
+
         function isIsabellaAvailable() {
             const now = new Date();
             const nyFormatter = new Intl.DateTimeFormat('en-US', {
@@ -243,8 +243,7 @@
                 if (responseTimeout) clearTimeout(responseTimeout);
             }
         }
-        */
-        // =====================================================================
+
     
         function showLogin() {
             document.getElementById('login-form').style.display = 'block';
@@ -350,11 +349,11 @@
         }
     
         async function sendToBackend(msg) {
-            if (isSending) return;
+            if (!isIsabellaAvailable()) return;
+            
             isSending = true;
-            isBotReplying = true;
             showTyping();
-    
+            
             try {
                 const res = await fetch('/api/reply', {
                     method: 'POST',
@@ -367,10 +366,10 @@
                         message: msg
                     })
                 });
-    
+                
                 const data = await res.json();
-    
-                if (data.replies && data.replies.length > 0) {
+                
+                if (data.replies) {
                     for (let bubble of data.replies) {
                         await new Promise(resolve => {
                             setTimeout(() => {
@@ -382,11 +381,9 @@
                 }
             } catch (err) {
                 console.error(err);
-                addMessage("Sorry, something went wrong...", 'received');
             } finally {
                 hideTyping();
                 isSending = false;
-                isBotReplying = false;
             }
         }
     
@@ -402,10 +399,11 @@
         }
     
         function sendMessage() {
+            if (!isIsabellaAvailable()) return;
+            
             const msg = input.value.trim();
-            if (!msg) return;
+            if (!msg || isSending) return;
     
-            // Allow sending even while bot is replying
             addMessage(msg, 'sent');
             input.value = '';
             resetTypingTimer(msg);
@@ -428,9 +426,9 @@
         // Initialize
         window.addEventListener('load', () => {
             checkAuth();
-            // updateAvailability();           // Commented out
-            // setInterval(updateAvailability, 30000); // Commented out
-        });
+            updateAvailability();
+            setInterval(updateAvailability, 30000); // Check every 30 seconds
+            });
     </script>
 </body>
 </html>
