@@ -203,6 +203,7 @@
         let token = localStorage.getItem('token');
         let currentUser = null;
         let convoId = null;
+       
         const messagesContainer = document.getElementById('messages');
         const typingContainer = document.getElementById('typing-container');
         const input = document.getElementById('user-input');
@@ -214,11 +215,11 @@
         
         let isSending = false;
         let responseTimeout = null;
+    
         const USER_TYPING_DELAY = 4500;
         const BOT_THINKING_DELAY = 4000;
     
-        // ==================== AVAILABILITY CODE COMMENTED OUT ====================
-
+        // ==================== AVAILABILITY (5PM - 2AM NYC) ====================
         function isIsabellaAvailable() {
             const now = new Date();
             const nyFormatter = new Intl.DateTimeFormat('en-US', {
@@ -304,7 +305,7 @@
                     chatWrapper.style.display = 'flex';
                     userInfo.textContent = `Hi, ${currentUser.full_name || currentUser.email}`;
                     await loadUserHistory();
-                    // updateAvailability();   // Commented out
+                    updateAvailability();   // Commented out
                 } else {
                     alert(data.detail || "Login failed");
                 }
@@ -433,9 +434,8 @@
         // Initialize
         window.addEventListener('load', () => {
             checkAuth();
-            // Force update after a tiny delay to ensure DOM is ready
-            setTimeout(updateAvailability, 300);
-            setInterval(updateAvailability, 30000);
+            setTimeout(updateAvailability, 500);     // Initial check
+            setInterval(updateAvailability, 30000);  // Every 30 seconds
         });
     </script>
 </body>
