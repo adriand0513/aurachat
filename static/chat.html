@@ -261,14 +261,10 @@
         const offlineMessage = document.getElementById('offline-message');
         
         let isSending = false;
-        let responseTimeout = null;
-    
-        const USER_TYPING_DELAY = 4500;
-        const BOT_THINKING_DELAY = 4000;
     
         // ==================== AVAILABILITY (DISABLED FOR TESTING) ====================
         function isIsabellaAvailable() {
-            return true; // Always available
+            return true; // Always available during testing
         }
     
         function updateAvailability() {
@@ -278,7 +274,7 @@
             if (sendBtn) sendBtn.disabled = false;
         }
     
-        // ==================== AUTH ====================
+        // ==================== AUTH FUNCTIONS ====================
         function showLogin() {
             document.getElementById('login-form').style.display = 'block';
             document.getElementById('register-form').style.display = 'none';
@@ -341,22 +337,21 @@
                     localStorage.setItem('token', token);
                     localStorage.setItem('user', JSON.stringify(currentUser));
                     
-                    // Transition to chat
+                    // Transition to chat screen
                     authScreen.style.display = 'none';
                     chatWrapper.style.display = 'flex';
                     
                     userInfo.textContent = `Hi, ${currentUser.full_name || currentUser.email}`;
                     
                     await updateSubscriptionDisplay();
-                    await updateUsageCounter();
                     await loadUserHistory();
                     updateAvailability();
                 } else {
                     alert(data.detail || "Login failed. Please check your credentials.");
                 }
             } catch(e) {
-                console.error(e);
-                alert("Network error. Please try again.");
+                console.error("Login error:", e);
+                alert("Login error. Please try again.");
             }
         }
     
@@ -372,7 +367,7 @@
                 convoId = data.convo_id || `user_${currentUser.id}`;
                 localStorage.setItem('convo_id', convoId);
                 messagesContainer.innerHTML = '';
-                
+               
                 data.messages.forEach(m => {
                     const type = m.role === 'user' ? 'sent' : 'received';
                     addMessage(m.content, type);
@@ -449,11 +444,10 @@
     
             addMessage(msg, 'sent');
             input.value = '';
-            sendToBackend(msg);   // Direct send for testing
-            await updateUsageCounter();
+            sendToBackend(msg);
         }
     
-        // ==================== PAYMENTS ====================
+        // ==================== PAYMENTS & UI ====================
         function showPricingModal() {
             document.getElementById('pricing-modal').style.display = 'flex';
         }
@@ -487,42 +481,6 @@
             const tier = (currentUser.subscription_tier || 'free').toUpperCase();
             tierEl.textContent = tier === 'FREE' ? 'Free Plan' : `${tier} Active`;
             statusEl.style.display = 'block';
-        }
-
-       // ==================== USAGE COUNTER ====================
-        async function updateUsageCounter() {
-            const counterEl = document.getElementById('usage-counter');
-            if (!counterEl || !currentUser || !token) return;
-        
-            try {
-                const res = await fetch('/api/usage', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (!res.ok) {
-                    counterEl.innerHTML = 'Loading...';
-                    return;
-                }
-                
-                const data = await res.json();
-                const tier = (currentUser.subscription_tier || 'free').toLowerCase();
-                
-                if (tier === 'premium' || tier === 'ultimate') {
-                    counterEl.innerHTML = 'Unlimited ✨';
-                    counterEl.style.background = 'rgba(0, 200, 100, 0.15)';
-                    counterEl.style.border = '1px solid #00c864';
-                } else {
-                    const remaining = Math.max(0, 30 - (data.daily_count || 0));
-                    counterEl.innerHTML = `${remaining} / 30 messages today`;
-                    
-                    if (remaining < 10) {
-                        counterEl.style.background = 'rgba(255, 100, 100, 0.2)';
-                        counterEl.style.border = '1px solid #ff6464';
-                    }
-                }
-            } catch (e) {
-                counterEl.innerHTML = '—';
-            }
         }
     
         // ==================== INIT ====================
