@@ -183,6 +183,12 @@
             <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
                 <div id="user-info"></div>
                 
+                <!-- Usage Counter -->
+                <div id="usage-counter" 
+                     style="font-size:0.85rem; padding:6px 12px; border-radius:20px; background:rgba(195,0,255,0.15); border:1px solid var(--accent); color:#f8f0ff;">
+                    <!-- Populated by JS -->
+                </div>
+                
                 <div id="subscription-status" style="display:none; font-size:0.85rem; padding:6px 12px; border-radius:20px; background:rgba(195,0,255,0.2); border:1px solid var(--accent); cursor:pointer;" onclick="showPricingModal()">
                     <span id="current-tier"></span>
                 </div>
@@ -329,6 +335,7 @@
                     userInfo.textContent = `Hi, ${currentUser.full_name || currentUser.email}`;
                     
                     await updateSubscriptionDisplay();
+                    await updateUsageCounter();
                     await loadUserHistory();
                     updateAvailability();
                 } else {
@@ -430,6 +437,7 @@
             addMessage(msg, 'sent');
             input.value = '';
             sendToBackend(msg);   // Direct send for testing
+            await updateUsageCounter();
         }
     
         // ==================== PAYMENTS ====================
@@ -466,6 +474,42 @@
             const tier = (currentUser.subscription_tier || 'free').toUpperCase();
             tierEl.textContent = tier === 'FREE' ? 'Free Plan' : `${tier} Active`;
             statusEl.style.display = 'block';
+        }
+
+       // ==================== USAGE COUNTER ====================
+        async function updateUsageCounter() {
+            const counterEl = document.getElementById('usage-counter');
+            if (!counterEl || !currentUser || !token) return;
+        
+            try {
+                const res = await fetch('/api/usage', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!res.ok) {
+                    counterEl.innerHTML = 'Loading...';
+                    return;
+                }
+                
+                const data = await res.json();
+                const tier = (currentUser.subscription_tier || 'free').toLowerCase();
+                
+                if (tier === 'premium' || tier === 'ultimate') {
+                    counterEl.innerHTML = 'Unlimited ✨';
+                    counterEl.style.background = 'rgba(0, 200, 100, 0.15)';
+                    counterEl.style.border = '1px solid #00c864';
+                } else {
+                    const remaining = Math.max(0, 30 - (data.daily_count || 0));
+                    counterEl.innerHTML = `${remaining} / 30 messages today`;
+                    
+                    if (remaining < 10) {
+                        counterEl.style.background = 'rgba(255, 100, 100, 0.2)';
+                        counterEl.style.border = '1px solid #ff6464';
+                    }
+                }
+            } catch (e) {
+                counterEl.innerHTML = '—';
+            }
         }
     
         // ==================== INIT ====================
