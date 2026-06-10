@@ -49,7 +49,7 @@ from memory import (
     get_relationship_level, get_pet_name
 )
 from analytics import log_event, get_live_stats
-from auth import register_user, authenticate_user, create_access_token, get_current_user
+from auth import register_user, authenticate_user, create_access_token, get_current_user, get_db_connection
 from archetype import detect_archetype
 
 from relationship_state import (
@@ -58,15 +58,20 @@ from relationship_state import (
     add_narrative_moment
 )
 
+from payment import router as payment_router
+
+
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 
 app = FastAPI(title="Isabella Chatbot", default_response_class=DateTimeJSONResponse)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+app.include_router(payment_router)
 # ── Guards ─────────────────────────────────────
 last_reply_time = defaultdict(float)
 REPLY_COOLDOWN_SECONDS = 4.5
 convo_rate_limits = defaultdict(list)
+monitor_connections: list = []
 
 def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
     now = time.time()
@@ -261,18 +266,48 @@ async def monitor_websocket(websocket: WebSocket, token: str = None):
         logger.error(f"Monitor WebSocket error: {e}")
 
 # ── Protected Chat Route ─────────────────────────────────────
+# ── Protected Chat Route with Tier Enforcement ─────────────────────────────────────
 @app.post("/api/reply")
 async def generate_reply(body: dict = Body(...), user: dict = Depends(get_current_user)):
     start_time = time.time()
     convo_id = body.get("convo_id")
     user_message = body.get("message", "").strip()
 
-    logger.info(f"📥 /api/reply | user={user.get('id')} | convo={convo_id} | msg='{user_message[:80]}'")
+    logger.info(f"📥 /api/reply | user={user.get('id')} | tier={user.get('subscription_tier')} | convo={convo_id}")
 
     if not convo_id:
         raise HTTPException(400, "convo_id required")
 
-    # ── Rate Limiting ─────────────────────────────────────
+    # ==================== TIER ENFORCEMENT ====================
+    tier = user.get("subscription_tier", "free").lower()
+    is_premium = tier in ["premium", "ultimate"]
+
+    if not is_premium:
+        # Free users: Daily message limit with nice message
+        daily_limit = 30
+        
+        conn = get_db_connection()  # Make sure this function is imported from auth or memory
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT COUNT(*) FROM chat_history 
+            WHERE user_id = ? 
+              AND role = 'user' 
+              AND date(timestamp) = date('now')
+        """, (user["id"],))
+        daily_count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+
+        if daily_count >= daily_limit:
+            return {
+                "replies": [
+                    "Hey papi 💕 You've hit your daily free message limit. "
+                    "Upgrade to Premium or Ultimate for unlimited chats, voice, NSFW, and so much more. "
+                    "Want to keep talking? Click Upgrade ✨"
+                ]
+            }
+
+    # ── Rate Limiting (existing) ─────────────────────────────────────
     now = time.time()
     if now - last_reply_time.get(convo_id, 0) < REPLY_COOLDOWN_SECONDS:
         return {"replies": []}
@@ -291,7 +326,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         history = get_history(convo_id)
 
-        # Sanitize history for xAI (datetime fix)
+        # Sanitize history for xAI
         def sanitize_for_json(data):
             if isinstance(data, list):
                 return [sanitize_for_json(item) for item in data]
@@ -306,7 +341,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         # Get NYC context
         context = get_nyc_context()
 
-        # === Build System Prompt with Full State ===
+        # === Build System Prompt ===
         system_prompt = get_system_prompt(
             user_name=user.get("full_name"),
             current_time=context.get("time", ""),
@@ -314,7 +349,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             state=state
         )
 
-        # Add relevant facts and relationship info
         relevant_facts = get_relevant_facts(convo_id, limit=5)
         rel_level = state.get("level", 1) if state else 1
         pet_name = state.get("pet_name") if state else None
@@ -363,7 +397,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         duration_ms = int((time.time() - start_time) * 1000)
         log_event("response_generated", convo_id, user_id=user.get("id"), duration_ms=duration_ms)
 
-        # === Update Unified State for Longevity ===
+        # === Update Relationship State ===
         emotional_delta = 1 if any(word in user_message.lower() for word in ["miss", "want", "love", "beautiful", "hot", "sexy"]) else 0
         
         update_relationship_state(
@@ -373,7 +407,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             note=f"User said: {user_message[:120]}"
         )
 
-        # Add narrative moment for important exchanges
         if len(user_message) > 25:
             add_narrative_moment(
                 convo_id, 
@@ -388,6 +421,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     except Exception as e:
         logger.error(f"💥 Unexpected error: {e}", exc_info=True)
         return {"replies": []}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
