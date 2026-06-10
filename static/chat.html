@@ -345,6 +345,7 @@
                     await updateSubscriptionDisplay();
                     await loadUserHistory();
                     updateAvailability();
+                    await updateUsageCounter();   // Now safe to call
                 } else {
                     alert(data.detail || "Login failed. Please check your credentials.");
                 }
@@ -352,6 +353,12 @@
                 console.error("Login error:", e);
                 alert("Login error. Please try again.");
             }
+        }
+    
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.reload();
         }
     
         // ==================== CHAT CORE ====================
@@ -390,6 +397,15 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     
+        function showTyping() {
+            typingContainer.style.display = 'block';
+            scrollToBottom();
+        }
+    
+        function hideTyping() {
+            typingContainer.style.display = 'none';
+        }
+    
         async function sendToBackend(msg) {
             isSending = true;
             showTyping();
@@ -425,6 +441,7 @@
             } finally {
                 hideTyping();
                 isSending = false;
+                await updateUsageCounter(); // Update counter after sending
             }
         }
     
@@ -437,16 +454,7 @@
             sendToBackend(msg);
         }
     
-        function showTyping() {
-            typingContainer.style.display = 'block';
-            scrollToBottom();
-        }
-    
-        function hideTyping() {
-            typingContainer.style.display = 'none';
-        }
-    
-        // ==================== PAYMENTS ====================
+        // ==================== PAYMENTS & USAGE ====================
         function showPricingModal() {
             document.getElementById('pricing-modal').style.display = 'flex';
         }
@@ -482,6 +490,41 @@
             statusEl.style.display = 'block';
         }
     
+        async function updateUsageCounter() {
+            const counterEl = document.getElementById('usage-counter');
+            if (!counterEl || !currentUser) return;
+           
+            try {
+                const res = await fetch('/api/usage', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+               
+                if (!res.ok) {
+                    counterEl.innerHTML = '—';
+                    return;
+                }
+               
+                const data = await res.json();
+                const tier = (currentUser.subscription_tier || 'free').toLowerCase();
+               
+                if (tier === 'premium' || tier === 'ultimate') {
+                    counterEl.innerHTML = 'Unlimited ✨';
+                    counterEl.style.background = 'rgba(0, 200, 100, 0.15)';
+                    counterEl.style.border = '1px solid #00c864';
+                } else {
+                    const remaining = Math.max(0, 30 - (data.daily_count || 0));
+                    counterEl.innerHTML = `${remaining} / 30 today`;
+                   
+                    if (remaining < 10) {
+                        counterEl.style.background = 'rgba(255, 100, 100, 0.2)';
+                        counterEl.style.border = '1px solid #ff6464';
+                    }
+                }
+            } catch (e) {
+                counterEl.innerHTML = '—';
+            }
+        }
+    
         // ==================== INIT ====================
         window.addEventListener('load', () => {
             if (token) {
@@ -491,6 +534,7 @@
                 userInfo.textContent = `Hi, ${currentUser.full_name || currentUser.email || 'User'}`;
                 loadUserHistory();
                 updateSubscriptionDisplay();
+                updateUsageCounter();
             }
             updateAvailability();
         });
