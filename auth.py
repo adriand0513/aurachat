@@ -23,6 +23,7 @@ def ensure_users_table():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Create table with all columns
         cur.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -38,7 +39,7 @@ def ensure_users_table():
             )
         ''')
         
-        # Add columns safely if they don't exist
+        # Add missing columns safely
         cur.execute('''
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS subscription_tier TEXT DEFAULT 'free',
@@ -49,9 +50,9 @@ def ensure_users_table():
         ''')
         
         conn.commit()
-        logger.info("✅ Users table ensured with all subscription columns")
+        logger.info("✅ Users table fully ensured with subscription columns")
     except Exception as e:
-        logger.error(f"Table ensure error: {e}")
+        logger.error(f"Table migration error: {e}")
     finally:
         cur.close()
         conn.close()
@@ -174,7 +175,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT id, email, full_name, subscription_tier FROM users WHERE id = %s", (user_id,))
+        cur.execute("""
+            SELECT id, email, full_name, subscription_tier 
+            FROM users WHERE id = %s
+        """, (user_id,))
         user = cur.fetchone()
         if user is None:
             raise credentials_exception
@@ -182,7 +186,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             "id": user[0],
             "email": user[1],
             "full_name": user[2],
-            "subscription_tier": user[3]
+            "subscription_tier": user[3] if len(user) > 3 else "free"
         }
     finally:
         cur.close()
