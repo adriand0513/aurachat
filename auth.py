@@ -20,7 +20,6 @@ def get_db_connection():
 
 
 def ensure_users_table():
-    """Ensure users table exists with all columns"""
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -38,8 +37,21 @@ def ensure_users_table():
                 subscription_expires_at TIMESTAMP
             )
         ''')
+        
+        # Add columns safely if they don't exist
+        cur.execute('''
+            ALTER TABLE users 
+            ADD COLUMN IF NOT EXISTS subscription_tier TEXT DEFAULT 'free',
+            ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
+            ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT,
+            ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'inactive',
+            ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;
+        ''')
+        
         conn.commit()
-        logger.info("✅ Users table ensured with subscription columns")
+        logger.info("✅ Users table ensured with all subscription columns")
+    except Exception as e:
+        logger.error(f"Table ensure error: {e}")
     finally:
         cur.close()
         conn.close()
