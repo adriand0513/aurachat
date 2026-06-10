@@ -1,4 +1,4 @@
-# auth.py - PostgreSQL Version with Stronger Initialization
+# auth.py - Clean PostgreSQL Version
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, JWTError
@@ -6,7 +6,6 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import psycopg2
-import os
 import logging
 from config import JWT_SECRET, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, DATABASE_URL
 
@@ -21,7 +20,7 @@ def get_db_connection():
 
 
 def ensure_users_table():
-    """Force create users table"""
+    """Ensure users table exists with all columns"""
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -31,13 +30,16 @@ def ensure_users_table():
                 email TEXT UNIQUE NOT NULL,
                 hashed_password TEXT NOT NULL,
                 full_name TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                subscription_tier TEXT DEFAULT 'free',
+                stripe_customer_id TEXT,
+                stripe_subscription_id TEXT,
+                subscription_status TEXT DEFAULT 'inactive',
+                subscription_expires_at TIMESTAMP
             )
         ''')
         conn.commit()
-        logger.info("✅ Users table ensured in PostgreSQL")
-    except Exception as e:
-        logger.error(f"Table creation error: {e}")
+        logger.info("✅ Users table ensured with subscription columns")
     finally:
         cur.close()
         conn.close()
@@ -120,6 +122,29 @@ def authenticate_user(email: str, password: str):
         conn.close()
 
 
+def update_user_subscription(user_id: int, tier: str, stripe_subscription_id: str = None, status: str = "active"):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE users 
+            SET subscription_tier = %s,
+                stripe_subscription_id = %s,
+                subscription_status = %s,
+                subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 month'
+            WHERE id = %s
+        ''', (tier, stripe_subscription_id, status, user_id))
+        conn.commit()
+        logger.info(f"✅ Subscription updated for user {user_id} to {tier}")
+        return True
+    except Exception as e:
+        logger.error(f"Subscription update error: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -137,15 +162,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT id, email, full_name FROM users WHERE id = %s", (user_id,))
+        cur.execute("SELECT id, email, full_name, subscription_tier FROM users WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if user is None:
             raise credentials_exception
         return {
             "id": user[0],
             "email": user[1],
-            "full_name": user[2]
+            "full_name": user[2],
+            "subscription_tier": user[3]
         }
     finally:
         cur.close()
         conn.close()
+
+
+# Ensure table on import
+ensure_users_table()
