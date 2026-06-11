@@ -170,14 +170,19 @@ async def get_usage(user: dict = Depends(get_current_user)):
 @app.get("/success")
 async def payment_success(session_id: str = None):
     try:
-        # Optional: Verify the session if you want
-        if session_id:
-            # You can add verification here later
-            pass
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
-    except Exception:
-        return HTMLResponse("<h1>Upgrade Successful! Redirecting...</h1><script>setTimeout(() => window.location.href='', 2000);</script>")
+    except:
+        # Fallback
+        return HTMLResponse("""
+            <h1 style="text-align:center; margin-top:100px; color:#c300ff;">
+                Upgrade Successful!<br><br>
+                Redirecting to chat...
+            </h1>
+            <script>
+                setTimeout(() => window.location.href = '/', 2500);
+            </script>
+        """)
 
 
 # ── Admin All Past Chats ─────────────────────────────────────
