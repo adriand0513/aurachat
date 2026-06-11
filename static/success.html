@@ -90,7 +90,7 @@
     </div>
 
     <script>
-        let timeLeft = 5;
+        let timeLeft = 10;
         const countdownEl = document.getElementById('countdown');
 
         const timer = setInterval(() => {
@@ -99,7 +99,7 @@
             
             if (timeLeft <= 0) {
                 clearInterval(timer);
-                window.location.href = '/chat';
+                window.location.href = '';
             }
         }, 1000);
     </script>
