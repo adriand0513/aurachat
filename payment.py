@@ -1,4 +1,4 @@
-# payment.py
+# payment.py - Improved with Better Success Handling
 import stripe
 from fastapi import APIRouter, HTTPException, Request, Depends
 from dotenv import load_dotenv
@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 
 # ============== PRICE CONFIG ==============
 PRICE_IDS = {
-    # One-time purchases (your existing)
+    # One-time purchases
     "pic_tease": "price_1T1f1cF49k4gEmVBLQ7Mu5xd",
 
-    # Subscription tiers - CREATE THESE IN STRIPE DASHBOARD
-    "premium_monthly": "price_1TgVcyF49k4gEmVBM7p27KwH",   # e.g. $9-19 / month
-    "ulitmate_monthly": "price_1TgVcYF49k4gEmVBkfUe13d6", # e.g. $49+ / month
+    # Subscription tiers
+    "premium_monthly": "price_1TgVcyF49k4gEmVBM7p27KwH",
+    "ultimate_monthly": "price_1TgVcYF49k4gEmVBkfUe13d6",   # Fixed typo
 }
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -37,7 +37,6 @@ async def create_checkout_session(
         price_id = PRICE_IDS[price_type]
         is_subscription = "monthly" in price_type
 
-        # Create Stripe Customer
         customer = stripe.Customer.create(
             email=current_user["email"],
             metadata={"user_id": str(current_user["id"])}
@@ -48,8 +47,8 @@ async def create_checkout_session(
             payment_method_types=["card"],
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription" if is_subscription else "payment",
-            success_url="https://aurorasparq.com/chat?success=true&session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="https://aurorasparq.com/chat",
+            success_url="https://www.aurorasparq.com/success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="https://www.aurorasparq.com/chat",
             metadata={
                 "user_id": str(current_user["id"]),
                 "price_type": price_type,
@@ -67,6 +66,33 @@ async def create_checkout_session(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Success Verification Endpoint
+@router.get("/success")
+async def payment_success(session_id: str):
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        
+        if session.payment_status == "paid" or session.status == "complete":
+            user_id_str = session.metadata.get("user_id")
+            price_type = session.metadata.get("price_type")
+            
+            if user_id_str and price_type:
+                user_id = int(user_id_str)
+                tier = "premium" if "premium" in price_type else "ultimate"
+                
+                update_user_subscription(user_id, tier, session.get("subscription"))
+                logger.info(f"✅ Payment success - upgraded user {user_id} to {tier}")
+                
+                return {"status": "success", "tier": tier, "message": "Payment successful! Account upgraded."}
+        
+        return {"status": "pending", "message": "Payment is being processed..."}
+        
+    except Exception as e:
+        logger.error(f"Success verification failed: {e}")
+        return {"status": "error", "message": "Could not verify payment"}
+
+
+# Webhook (keep your existing one, or use this improved version)
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -86,8 +112,8 @@ async def stripe_webhook(request: Request):
 
         if user_id_str and price_type:
             user_id = int(user_id_str)
-            tier = "premium" if "premium" in price_type else "unlimited"
+            tier = "premium" if "premium" in price_type else "ultimate"
             update_user_subscription(user_id, tier, session.get("subscription"))
-            logger.info(f"✅ Subscription activated for user {user_id}: {tier}")
+            logger.info(f"✅ Webhook upgraded user {user_id} to {tier}")
 
     return {"status": "success"}
