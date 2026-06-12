@@ -1,6 +1,7 @@
-# payment.py - Improved with Better Success Handling
+# payment.py - Clean & Robust Version
 import stripe
 from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 import os
 import logging
@@ -14,12 +15,9 @@ logger = logging.getLogger(__name__)
 
 # ============== PRICE CONFIG ==============
 PRICE_IDS = {
-    # One-time purchases
     "pic_tease": "price_1T1f1cF49k4gEmVBLQ7Mu5xd",
-
-    # Subscription tiers
     "premium_monthly": "price_1TgVcyF49k4gEmVBM7p27KwH",
-    "ultimate_monthly": "price_1TgVcYF49k4gEmVBkfUe13d6",   # Fixed typo
+    "ultimate_monthly": "price_1TgVcYF49k4gEmVBkfUe13d6",
 }
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -48,27 +46,30 @@ async def create_checkout_session(
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription" if is_subscription else "payment",
             success_url="https://www.aurorasparq.com/success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="https://www.aurorasparq.com/",
+            cancel_url="https://www.aurorasparq.com/chat",
             metadata={
                 "user_id": str(current_user["id"]),
                 "price_type": price_type,
             }
         )
 
-        logger.info(f"Checkout session created for user {current_user['id']} - {price_type}")
-        return {"url": checkout.url, "session_id": checkout.id}
+        logger.info(f"✅ Checkout session created for user {current_user['id']} → {price_type}")
+        return {"url": checkout.url}
 
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Payment error: {str(e)}")
+        logger.error(f"Stripe error: {e}")
+        raise HTTPException(status_code=500, detail="Payment service temporarily unavailable")
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"Checkout error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# Success Verification Endpoint
+# Success Page
 @router.get("/success")
-async def payment_success(session_id: str):
+async def payment_success(session_id: str = None):
+    if not session_id:
+        return HTMLResponse("<h2>Payment Successful! Redirecting...</h2><script>setTimeout(() => window.location.href='/chat', 2000);</script>")
+
     try:
         session = stripe.checkout.Session.retrieve(session_id)
         
@@ -79,20 +80,25 @@ async def payment_success(session_id: str):
             if user_id_str and price_type:
                 user_id = int(user_id_str)
                 tier = "premium" if "premium" in price_type else "ultimate"
-                
                 update_user_subscription(user_id, tier, session.get("subscription"))
-                logger.info(f"✅ Payment success - upgraded user {user_id} to {tier}")
-                
-                return {"status": "success", "tier": tier, "message": "Payment successful! Account upgraded."}
-        
-        return {"status": "pending", "message": "Payment is being processed..."}
-        
+                logger.info(f"✅ Success page upgraded user {user_id} to {tier}")
+
+        # Serve beautiful success page
+        with open("static/success.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
+
     except Exception as e:
-        logger.error(f"Success verification failed: {e}")
-        return {"status": "error", "message": "Could not verify payment"}
+        logger.error(f"Success page error: {e}")
+        return HTMLResponse("""
+            <h1 style="text-align:center;margin-top:100px;color:#c300ff;">
+                Payment Successful!<br><br>
+                Redirecting to chat...
+            </h1>
+            <script>setTimeout(() => window.location.href='/chat', 3000);</script>
+        """)
 
 
-# Webhook (keep your existing one, or use this improved version)
+# Webhook
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -102,7 +108,7 @@ async def stripe_webhook(request: Request):
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        logger.error(f"Webhook signature verification failed: {e}")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event["type"] == "checkout.session.completed":
