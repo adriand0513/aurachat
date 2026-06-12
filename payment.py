@@ -70,7 +70,7 @@ async def create_checkout_session(
 @router.get("/success")
 async def payment_success(session_id: str = None):
     if not session_id:
-        return HTMLResponse("<h2>Payment Successful! Redirecting...</h2><script>setTimeout(() => window.location.href='/', 2000);</script>")
+        return HTMLResponse("<h1>Payment Successful! Redirecting...</h1><script>setTimeout(() => window.location.href='/', 2000);</script>")
 
     try:
         session = stripe.checkout.Session.retrieve(session_id)
@@ -82,10 +82,20 @@ async def payment_success(session_id: str = None):
             if user_id_str and price_type:
                 user_id = int(user_id_str)
                 tier = "premium" if "premium" in price_type else "ultimate"
-                update_user_subscription(user_id, tier, session.get("subscription"))
-                logger.info(f"✅ Success page upgraded user {user_id} to {tier}")
+                
+                success = update_user_subscription(user_id, tier, session.get("subscription"))
+                
+                if success:
+                    logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
+                else:
+                    logger.error(f"❌ Failed to update subscription for user {user_id}")
+        
+        # Serve success page
+        with open("static/success.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
 
-        # Serve beautiful success page
+    except Exception as e:
+        logger.error(f"Success handler error: {e}")
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
 
