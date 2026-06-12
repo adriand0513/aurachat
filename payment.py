@@ -89,7 +89,7 @@ async def payment_success(session_id: str = None):
                     logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
                 else:
                     logger.error(f"❌ Failed to update subscription for user {user_id}")
-        
+
         # Serve success page
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
@@ -98,17 +98,6 @@ async def payment_success(session_id: str = None):
         logger.error(f"Success handler error: {e}")
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
-
-    except Exception as e:
-        logger.error(f"Success page error: {e}")
-        return HTMLResponse("""
-            <h1 style="text-align:center;margin-top:100px;color:#c300ff;">
-                Payment Successful!<br><br>
-                Redirecting to chat...
-            </h1>
-            <script>setTimeout(() => window.location.href='/', 3000);</script>
-        """)
-
 
 # Webhook
 @router.post("/webhook")
