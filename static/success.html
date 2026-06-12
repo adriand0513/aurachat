@@ -79,24 +79,24 @@
 </head>
 <body>
     <div class="success-container">
-        <div class="success-icon">✨</div>
+        <div class="success-icon">💎</div>
         <h1>Upgrade Successful!</h1>
-        <p>Welcome to a whole new level with Isabella 💕<br>
-           Your account has been upgraded. Enjoy unlimited access.</p>
+        <p>Your account has been upgraded.<br>
+           Welcome to unlimited access with Isabella ✨</p>
         
         <a href="/" class="btn">Continue to Isabella</a>
         
-        <div class="redirect-text">Redirecting you in <span id="countdown">5</span> seconds...</div>
+        <div style="margin-top:40px; font-size:1rem; opacity:0.8;">
+            Redirecting in <span id="countdown">4</span> seconds...
+        </div>
     </div>
 
     <script>
-        let timeLeft = 5;
-        const countdownEl = document.getElementById('countdown');
-
+        let timeLeft = 4;
+        const el = document.getElementById('countdown');
         const timer = setInterval(() => {
             timeLeft--;
-            countdownEl.textContent = timeLeft;
-            
+            el.textContent = timeLeft;
             if (timeLeft <= 0) {
                 clearInterval(timer);
                 window.location.href = '/';
