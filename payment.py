@@ -25,10 +25,12 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(
-    price_type: str,
+    data: dict = Body(...),                    # ← This is the key change
     current_user: dict = Depends(get_current_user)
 ):
-    if price_type not in PRICE_IDS:
+    price_type = data.get("price_type")
+    
+    if not price_type or price_type not in PRICE_IDS:
         raise HTTPException(status_code=400, detail="Invalid price type")
 
     try:
