@@ -9,10 +9,11 @@
             --bg: #0d0015;
             --accent: #c300ff;
             --accent2: #ff0099;
+            --gold: #ffd700;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
         body {
-            background: var(--bg);
+            background: linear-gradient(135deg, #0d0015, #1a0033);
             color: #f8f0ff;
             font-family: system-ui, sans-serif;
             height: 100vh;
@@ -24,73 +25,90 @@
         }
         .success-container {
             text-align: center;
-            max-width: 480px;
-            padding: 40px 30px;
-            background: rgba(30,20,50,0.95);
-            border-radius: 28px;
+            max-width: 520px;
+            padding: 60px 50px;
+            background: rgba(20, 10, 45, 0.97);
+            border-radius: 32px;
             border: 2px solid var(--accent);
-            box-shadow: 0 0 60px rgba(195, 0, 255, 0.3);
+            box-shadow: 0 0 80px rgba(195, 0, 255, 0.5),
+                        0 0 120px rgba(255, 0, 153, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        .success-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+            animation: shine 8s linear infinite;
         }
         .success-icon {
-            font-size: 80px;
+            font-size: 100px;
             margin-bottom: 20px;
-            animation: pop 0.6s ease;
+            animation: pop 0.8s ease;
         }
         h1 {
-            font-size: 2.4rem;
-            margin-bottom: 12px;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            font-size: 2.8rem;
+            margin-bottom: 16px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2), var(--gold));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         p {
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             opacity: 0.9;
-            line-height: 1.5;
-            margin-bottom: 30px;
+            line-height: 1.6;
+            margin-bottom: 40px;
         }
         .btn {
             display: inline-block;
-            padding: 16px 40px;
+            padding: 18px 52px;
             background: linear-gradient(135deg, var(--accent), var(--accent2));
             color: white;
-            font-weight: 600;
+            font-weight: 700;
+            font-size: 1.15rem;
             border-radius: 50px;
             text-decoration: none;
-            font-size: 1.1rem;
-            transition: all 0.3s;
-            margin: 10px;
+            transition: all 0.4s;
+            box-shadow: 0 10px 30px rgba(195, 0, 255, 0.4);
         }
         .btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 30px rgba(195, 0, 255, 0.6);
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 0 15px 40px rgba(195, 0, 255, 0.6);
         }
         .redirect-text {
-            margin-top: 30px;
-            font-size: 0.95rem;
-            opacity: 0.7;
+            margin-top: 35px;
+            font-size: 1rem;
+            opacity: 0.75;
         }
         @keyframes pop {
-            0% { transform: scale(0.5); }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); }
+            0% { transform: scale(0.4) rotate(-15deg); }
+            60% { transform: scale(1.15) rotate(5deg); }
+            100% { transform: scale(1) rotate(0); }
+        }
+        @keyframes shine {
+            0% { transform: translateX(-50%) translateY(-50%) rotate(0deg); }
+            100% { transform: translateX(-50%) translateY(-50%) rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="success-container">
-        <div class="success-icon">✨</div>
-        <h1>Upgrade Successful!</h1>
-        <p>Welcome to a whole new level with Isabella 💕<br>
-           Your account has been upgraded. Enjoy unlimited access.</p>
+        <div class="success-icon">💎</div>
+        <h1>Welcome to the Next Level</h1>
+        <p>Thank you for upgrading, <strong>papi</strong>.<br>
+           Isabella is now yours without limits ✨</p>
         
-        <a href="" class="btn">Continue to Isabella</a>
+        <a href="/chat" class="btn">Continue to Isabella</a>
         
         <div class="redirect-text">Redirecting you in <span id="countdown">5</span> seconds...</div>
     </div>
 
     <script>
-        let timeLeft = 10;
+        let timeLeft = 5;
         const countdownEl = document.getElementById('countdown');
 
         const timer = setInterval(() => {
@@ -99,7 +117,7 @@
             
             if (timeLeft <= 0) {
                 clearInterval(timer);
-                window.location.href = '/';
+                window.location.href = '/chat';
             }
         }, 1000);
     </script>
