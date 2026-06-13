@@ -82,30 +82,66 @@ async def stripe_webhook(request: Request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
 
-        # Safe way to get metadata from Stripe object
-        metadata = getattr(session, "metadata", None) or {}
-        if not isinstance(metadata, dict):
-            try:
-                metadata = dict(metadata)
-            except:
-                metadata = {}
+        user_id_str = None
+        price_type = None
 
-        user_id_str = metadata.get("user_id")
-        price_type = metadata.get("price_type")
+        # Method 1: Try session.metadata with getattr
+        meta = getattr(session, "metadata", None)
+        if meta:
+            if isinstance(meta, dict):
+                user_id_str = meta.get("user_id")
+                price_type = meta.get("price_type")
+            else:
+                try:
+                    meta_dict = dict(meta)
+                    user_id_str = meta_dict.get("user_id")
+                    price_type = meta_dict.get("price_type")
+                except:
+                    pass
+
+        # Method 2: Try session.get() as dict fallback
+        if not user_id_str:
+            try:
+                meta = session.get("metadata", {}) if hasattr(session, "get") else {}
+                if isinstance(meta, dict):
+                    user_id_str = meta.get("user_id")
+                    price_type = meta.get("price_type")
+            except:
+                pass
+
+        # Method 3: Try Customer metadata as last resort
+        if not user_id_str:
+            customer_id = getattr(session, "customer", None)
+            if customer_id:
+                try:
+                    customer = stripe.Customer.retrieve(customer_id)
+                    cust_meta = getattr(customer, "metadata", None) or {}
+                    if isinstance(cust_meta, dict):
+                        user_id_str = cust_meta.get("user_id")
+                    else:
+                        try:
+                            cust_meta = dict(cust_meta)
+                            user_id_str = cust_meta.get("user_id")
+                        except:
+                            pass
+                except Exception as e:
+                    logger.warning(f"Customer metadata fallback error: {e}")
+
+        logger.info(f"WEBHOOK DEBUG - user_id_str: {user_id_str}, price_type: {price_type}")
 
         if user_id_str and price_type:
             try:
                 user_id = int(user_id_str)
-                tier = "premium" if "premium" in price_type else "ultimate"
+                tier = "premium" if "premium" in str(price_type).lower() else "ultimate"
 
                 success = update_user_subscription(user_id, tier, getattr(session, "subscription", None))
                 if success:
-                    logger.info(f"✅ WEBHOOK: User {user_id} upgraded to {tier}")
+                    logger.info(f"✅ WEBHOOK SUCCESS: User {user_id} upgraded to {tier}")
                 else:
-                    logger.error(f"❌ WEBHOOK: Failed to upgrade user {user_id}")
+                    logger.error(f"❌ WEBHOOK: update_user_subscription returned False for user {user_id}")
             except Exception as e:
                 logger.error(f"Webhook upgrade error: {e}")
-
-    return {"status": "success"}
+        else:
+            logger.warning("WEBHOOK: Could not extract user_id or price_type from any source")
 
     return {"status": "success"}
