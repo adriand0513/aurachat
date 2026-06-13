@@ -187,35 +187,41 @@ async def payment_success(session_id: str = None):
 
         session = stripe.checkout.Session.retrieve(session_id)
 
-        # === NEW WORKAROUND: Read from Customer instead of session.metadata ===
         user_id_str = None
         price_type = None
 
-        # Try to get from Customer metadata first (more reliable)
-        customer_id = getattr(session, "customer", None)
-        if customer_id:
-            try:
-                customer = stripe.Customer.retrieve(customer_id)
-                cust_meta = getattr(customer, "metadata", None) or {}
-                if not isinstance(cust_meta, dict):
-                    cust_meta = dict(cust_meta) if cust_meta else {}
-
-                user_id_str = cust_meta.get("user_id")
-            except Exception as cust_err:
-                logger.warning(f"Could not retrieve customer metadata: {cust_err}")
-
-        # Fallback to session metadata if customer didn't have it
-        if not user_id_str:
-            meta = getattr(session, "metadata", None) or {}
+        # === Try session.metadata first (safest way) ===
+        meta = getattr(session, "metadata", None)
+        if meta:
+            # Force to real dict safely
             if not isinstance(meta, dict):
                 try:
                     meta = dict(meta)
                 except:
                     meta = {}
-            user_id_str = meta.get("user_id")
-            price_type = meta.get("price_type")
 
-        # If we still don't have price_type, try session again
+            if isinstance(meta, dict):
+                user_id_str = meta.get("user_id")
+                price_type = meta.get("price_type")
+
+        # === Fallback to Customer metadata if still missing ===
+        if not user_id_str:
+            customer_id = getattr(session, "customer", None)
+            if customer_id:
+                try:
+                    customer = stripe.Customer.retrieve(customer_id)
+                    cust_meta = getattr(customer, "metadata", None) or {}
+                    if not isinstance(cust_meta, dict):
+                        try:
+                            cust_meta = dict(cust_meta)
+                        except:
+                            cust_meta = {}
+                    if isinstance(cust_meta, dict):
+                        user_id_str = cust_meta.get("user_id")
+                except Exception as e:
+                    logger.warning(f"Customer metadata fallback failed: {e}")
+
+        # Try to get price_type from session if still missing
         if not price_type:
             meta = getattr(session, "metadata", None) or {}
             if not isinstance(meta, dict):
@@ -225,7 +231,7 @@ async def payment_success(session_id: str = None):
                     meta = {}
             price_type = meta.get("price_type")
 
-        logger.info(f"DEBUG (workaround) user_id_str: {user_id_str}, price_type: {price_type}")
+        logger.info(f"DEBUG final user_id_str: {user_id_str}, price_type: {price_type}")
 
         if user_id_str and price_type:
             user_id = int(user_id_str)
@@ -239,9 +245,9 @@ async def payment_success(session_id: str = None):
             if success:
                 logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
             else:
-                logger.error(f"❌ update_user_subscription returned False for user {user_id}")
+                logger.error(f"❌ update_user_subscription returned False")
         else:
-            logger.warning("DEBUG: Could not determine user_id or price_type")
+            logger.warning("Could not determine user_id or price_type from session or customer")
 
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
@@ -250,6 +256,7 @@ async def payment_success(session_id: str = None):
         logger.error(f"Success handler error: {str(e)}")
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
+
 
 # ── Admin All Past Chats ─────────────────────────────────────
 @app.get("/api/admin/chats")
