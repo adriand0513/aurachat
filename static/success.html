@@ -93,12 +93,17 @@
 
     <script>
         let timeLeft = 4;
-        const el = document.getElementById('countdown');
+        const countdownEl = document.getElementById('countdown');
+    
         const timer = setInterval(() => {
             timeLeft--;
-            el.textContent = timeLeft;
+            if (countdownEl) countdownEl.textContent = timeLeft;
+            
             if (timeLeft <= 0) {
                 clearInterval(timer);
+                // Clear old cached user data
+                localStorage.removeItem('user');
+                // Force reload the main page
                 window.location.href = '/';
             }
         }, 1000);
