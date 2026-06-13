@@ -190,16 +190,17 @@ async def payment_success(session_id: str = None):
         logger.info(f"DEBUG payment_status: {getattr(session, 'payment_status', None)}")
         logger.info(f"DEBUG metadata: {getattr(session, 'metadata', None)}")
 
-        # === RELIABLE METADATA EXTRACTION ===
         metadata = getattr(session, "metadata", None) or {}
+
         if not isinstance(metadata, dict):
             try:
                 metadata = dict(metadata)
             except:
                 metadata = {}
 
-        user_id_str = metadata.get("user_id")
-        price_type = metadata.get("price_type")
+        # Direct key access (more reliable)
+        user_id_str = metadata["user_id"] if "user_id" in metadata else None
+        price_type = metadata["price_type"] if "price_type" in metadata else None
 
         logger.info(f"DEBUG user_id_str: {user_id_str}, price_type: {price_type}")
 
@@ -215,7 +216,7 @@ async def payment_success(session_id: str = None):
             if success:
                 logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
             else:
-                logger.error(f"❌ update_user_subscription returned False for user {user_id}")
+                logger.error(f"❌ update_user_subscription returned False")
         else:
             logger.warning("DEBUG: Skipped update - missing user_id or price_type")
 
