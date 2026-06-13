@@ -187,25 +187,45 @@ async def payment_success(session_id: str = None):
 
         session = stripe.checkout.Session.retrieve(session_id)
 
-        logger.info(f"DEBUG payment_status: {getattr(session, 'payment_status', None)}")
-        logger.info(f"DEBUG metadata: {getattr(session, 'metadata', None)}")
+        # === NEW WORKAROUND: Read from Customer instead of session.metadata ===
+        user_id_str = None
+        price_type = None
 
-        metadata = getattr(session, "metadata", None) or {}
-        if not isinstance(metadata, dict):
+        # Try to get from Customer metadata first (more reliable)
+        customer_id = getattr(session, "customer", None)
+        if customer_id:
             try:
-                metadata = dict(metadata)
-            except:
-                metadata = {}
+                customer = stripe.Customer.retrieve(customer_id)
+                cust_meta = getattr(customer, "metadata", None) or {}
+                if not isinstance(cust_meta, dict):
+                    cust_meta = dict(cust_meta) if cust_meta else {}
 
-        # === DIAGNOSTIC LINES ===
-        logger.info(f"DEBUG metadata keys: {list(metadata.keys()) if metadata else 'empty'}")
-        logger.info(f"DEBUG 'user_id' in metadata: {'user_id' in metadata}")
+                user_id_str = cust_meta.get("user_id")
+            except Exception as cust_err:
+                logger.warning(f"Could not retrieve customer metadata: {cust_err}")
 
-        # Direct key access
-        user_id_str = metadata["user_id"] if "user_id" in metadata else None
-        price_type = metadata["price_type"] if "price_type" in metadata else None
+        # Fallback to session metadata if customer didn't have it
+        if not user_id_str:
+            meta = getattr(session, "metadata", None) or {}
+            if not isinstance(meta, dict):
+                try:
+                    meta = dict(meta)
+                except:
+                    meta = {}
+            user_id_str = meta.get("user_id")
+            price_type = meta.get("price_type")
 
-        logger.info(f"DEBUG user_id_str: {user_id_str}, price_type: {price_type}")
+        # If we still don't have price_type, try session again
+        if not price_type:
+            meta = getattr(session, "metadata", None) or {}
+            if not isinstance(meta, dict):
+                try:
+                    meta = dict(meta)
+                except:
+                    meta = {}
+            price_type = meta.get("price_type")
+
+        logger.info(f"DEBUG (workaround) user_id_str: {user_id_str}, price_type: {price_type}")
 
         if user_id_str and price_type:
             user_id = int(user_id_str)
@@ -219,9 +239,9 @@ async def payment_success(session_id: str = None):
             if success:
                 logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
             else:
-                logger.error(f"❌ update_user_subscription returned False")
+                logger.error(f"❌ update_user_subscription returned False for user {user_id}")
         else:
-            logger.warning("DEBUG: Skipped update - missing user_id or price_type")
+            logger.warning("DEBUG: Could not determine user_id or price_type")
 
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
