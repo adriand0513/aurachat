@@ -191,14 +191,17 @@ async def payment_success(session_id: str = None):
         logger.info(f"DEBUG metadata: {getattr(session, 'metadata', None)}")
 
         metadata = getattr(session, "metadata", None) or {}
-
         if not isinstance(metadata, dict):
             try:
                 metadata = dict(metadata)
             except:
                 metadata = {}
 
-        # Direct key access (more reliable)
+        # === DIAGNOSTIC LINES ===
+        logger.info(f"DEBUG metadata keys: {list(metadata.keys()) if metadata else 'empty'}")
+        logger.info(f"DEBUG 'user_id' in metadata: {'user_id' in metadata}")
+
+        # Direct key access
         user_id_str = metadata["user_id"] if "user_id" in metadata else None
         price_type = metadata["price_type"] if "price_type" in metadata else None
 
@@ -227,7 +230,6 @@ async def payment_success(session_id: str = None):
         logger.error(f"Success handler error: {str(e)}")
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
-
 
 # ── Admin All Past Chats ─────────────────────────────────────
 @app.get("/api/admin/chats")
