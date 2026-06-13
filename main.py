@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from typing import Dict, List
 from collections import defaultdict
 import json
+import stripe
 
 from fastapi import FastAPI, HTTPException, Body, WebSocket, WebSocketDisconnect, Depends, status
 from fastapi.responses import JSONResponse, HTMLResponse
