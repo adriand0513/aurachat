@@ -182,30 +182,39 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
 async def payment_success(session_id: str = None):
     """Handle successful payment and update user tier"""
     try:
-        if session_id:
-            session = stripe.checkout.Session.retrieve(session_id)
-            
-            if session.payment_status == "paid" or session.status == "complete":
+        if not session_id:
+            with open("static/success.html", "r", encoding="utf-8") as f:
+                return HTMLResponse(f.read())
+
+        # Retrieve the session from Stripe
+        session = stripe.checkout.Session.retrieve(session_id)
+
+        if session.payment_status == "paid" or getattr(session, "status", None) == "complete":
+            user_id_str = None
+            price_type = None
+
+            # Safely get metadata
+            if hasattr(session, "metadata") and session.metadata:
                 user_id_str = session.metadata.get("user_id")
                 price_type = session.metadata.get("price_type")
-                
-                if user_id_str and price_type:
-                    user_id = int(user_id_str)
-                    tier = "premium" if "premium" in price_type else "ultimate"
-                    
-                    success = update_user_subscription(user_id, tier, session.get("subscription"))
-                    
-                    if success:
-                        logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
-                    else:
-                        logger.error(f"❌ Failed to update subscription for user {user_id}")
-        
-        # Serve success page
+
+            if user_id_str and price_type:
+                user_id = int(user_id_str)
+                tier = "premium" if "premium" in price_type else "ultimate"
+
+                success = update_user_subscription(user_id, tier, getattr(session, "subscription", None))
+
+                if success:
+                    logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
+                else:
+                    logger.error(f"❌ Failed to update subscription for user {user_id}")
+
+        # Always serve the success page
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
 
     except Exception as e:
-        logger.error(f"Success handler error: {e}")
+        logger.error(f"Success handler error: {str(e)}")
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
 
