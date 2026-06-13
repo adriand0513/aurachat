@@ -182,34 +182,38 @@ async def get_current_user_info(user: dict = Depends(get_current_user)):
 async def payment_success(session_id: str = None):
     try:
         if not session_id:
+            logger.info("DEBUG: No session_id provided")
             with open("static/success.html", "r", encoding="utf-8") as f:
                 return HTMLResponse(f.read())
 
-        # Get the session from Stripe
         session = stripe.checkout.Session.retrieve(session_id)
 
-        # Get metadata safely
+        # === DEBUG LOGS ===
+        logger.info(f"DEBUG payment_status: {getattr(session, 'payment_status', None)}")
+        logger.info(f"DEBUG metadata: {getattr(session, 'metadata', None)}")
+
         metadata = getattr(session, "metadata", {}) or {}
         user_id_str = metadata.get("user_id") if isinstance(metadata, dict) else None
         price_type = metadata.get("price_type") if isinstance(metadata, dict) else None
+
+        logger.info(f"DEBUG user_id_str: {user_id_str}, price_type: {price_type}")
 
         if user_id_str and price_type:
             user_id = int(user_id_str)
             tier = "premium" if "premium" in str(price_type).lower() else "ultimate"
 
-            # Get subscription id if available
             sub_id = getattr(session, "subscription", None)
             if isinstance(sub_id, dict):
                 sub_id = sub_id.get("id")
 
-            # Update the user
             success = update_user_subscription(user_id, tier, sub_id)
             if success:
                 logger.info(f"✅ SUCCESS: User {user_id} upgraded to {tier}")
             else:
-                logger.error(f"❌ update_user_subscription failed for user {user_id}")
+                logger.error(f"❌ update_user_subscription returned False")
+        else:
+            logger.warning("DEBUG: Skipped update - missing user_id or price_type")
 
-        # Serve success page no matter what
         with open("static/success.html", "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
 
