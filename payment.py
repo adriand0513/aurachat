@@ -82,24 +82,38 @@ async def stripe_webhook(request: Request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
 
-        # Get user_id from client_reference_id (reliable)
+        # Reliable user_id from client_reference_id
         user_id_str = getattr(session, "client_reference_id", None)
 
-        # Get price_type from metadata
-        meta = getattr(session, "metadata", None) or {}
-        if not isinstance(meta, dict):
-            try:
-                meta = dict(meta)
-            except:
-                meta = {}
-        price_type = meta.get("price_type")
+        # Determine tier from the price that was actually purchased (most reliable)
+        price_type = None
+        try:
+            line_items = session.get("line_items", {}).get("data", []) if hasattr(session, "get") else []
+            if line_items:
+                price_id = line_items[0].get("price", {}).get("id")
+                if price_id == "price_1TgVcyF49k4gEmVBM7p27KwH":
+                    price_type = "premium_monthly"
+                elif price_id == "price_1TgVcYF49k4gEmVBkfUe13d6":
+                    price_type = "ultimate_monthly"
+        except:
+            pass
+
+        # Fallback: try metadata if line_items didn't work
+        if not price_type:
+            meta = getattr(session, "metadata", None) or {}
+            if not isinstance(meta, dict):
+                try:
+                    meta = dict(meta)
+                except:
+                    meta = {}
+            price_type = meta.get("price_type")
 
         logger.info(f"WEBHOOK → user_id: {user_id_str}, price_type: {price_type}")
 
         if user_id_str and price_type:
             try:
                 user_id = int(user_id_str)
-                tier = "premium" if "premium" in str(price_type).lower() else "ultimate"
+                tier = "premium" if "premium" in price_type else "ultimate"
 
                 success = update_user_subscription(user_id, tier, getattr(session, "subscription", None))
                 if success:
