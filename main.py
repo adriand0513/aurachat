@@ -398,7 +398,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         system_prompt = get_system_prompt(
             user_name=user.get("full_name"),
             current_time=context.get("time", ""),
-            weather=context.get("weather", ""),
             state=state,
             tier=tier
         )
