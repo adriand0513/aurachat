@@ -46,9 +46,13 @@ from config import (
 from prompt import get_system_prompt
 from postprocess import clean_reply
 from memory import (
-    get_history, save_message, get_relevant_facts,
-    get_relationship_level, get_pet_name,
-    extract_and_save_facts   
+    get_history,
+    save_message,
+    get_relevant_facts,
+    get_relationship_level,
+    get_pet_name,
+    extract_and_save_facts,
+    generate_and_save_summary   # ← Add this
 )
 from analytics import log_event, get_live_stats
 from auth import register_user, authenticate_user, create_access_token, get_current_user, get_db_connection, ensure_users_table, update_user_subscription
@@ -327,7 +331,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     start_time = time.time()
     convo_id = body.get("convo_id")
     user_message = body.get("message", "").strip()
-
     logger.info(f"📥 /api/reply | user={user.get('id')} | tier={user.get('subscription_tier')} | convo={convo_id}")
 
     if not convo_id:
@@ -357,8 +360,8 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         if daily_count >= daily_limit:
             return {
                 "replies": [
-                    "Hey papi 💕 You've reached your daily free message limit (10 messages). "
-                    "Upgrade to Premium or Ultimate for unlimited chats with me ✨"
+                    "Hey... you've reached your daily free message limit (10 messages). "
+                    "Upgrade to Premium or Ultimate if you want to keep talking to me today ✨"
                 ]
             }
 
@@ -375,13 +378,10 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         # Save user message
         if user_message:
             save_message(convo_id, {"role": "user", "content": user_message}, user_id=user.get("id"))
-        
+
             # ==================== AUTOMATIC FACT EXTRACTION ====================
-            tier = user.get("subscription_tier", "free").lower()
-        
             if tier == "ultimate":
                 extract_and_save_facts(convo_id, user_message, tier)
-        
             elif tier == "premium":
                 import random
                 if random.randint(1, 4) == 1:
@@ -460,12 +460,21 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user.get("id"))
 
+        # ==================== CONVERSATION SUMMARIZATION ====================
+        if tier == "ultimate":
+            try:
+                message_count = len(get_history(convo_id, limit=300))
+                if message_count % 25 == 0 and message_count > 20:
+                    generate_and_save_summary(convo_id, tier)
+            except Exception as e:
+                logger.error(f"Summarization trigger error: {e}")
+
         duration_ms = int((time.time() - start_time) * 1000)
         log_event("response_generated", convo_id, user_id=user.get("id"), duration_ms=duration_ms)
 
         # === Update Relationship State ===
         emotional_delta = 1 if any(word in user_message.lower() for word in ["miss", "want", "love", "beautiful", "hot", "sexy"]) else 0
-        
+
         update_relationship_state(
             convo_id,
             emotional_delta=emotional_delta,
