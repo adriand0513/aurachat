@@ -85,6 +85,28 @@ def init_relationship_state():
     conn.close()
     print("✅ Unified relationship_state initialized")
 
+def init_conversation_summaries():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS conversation_summaries (
+            id SERIAL PRIMARY KEY,
+            convo_id TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            start_message_id INTEGER,
+            end_message_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            importance INTEGER DEFAULT 5
+        )
+    ''')
+    
+    cur.execute('CREATE INDEX IF NOT EXISTS idx_summary_convo ON conversation_summaries(convo_id)')
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("✅ Conversation summaries table initialized")
+
 def get_relationship_state(convo_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -287,6 +309,94 @@ Only return facts with importance 6 or higher. If there are none, return nothing
     except Exception as e:
         logger.error(f"Fact extraction error: {e}")
 
+
+def generate_and_save_summary(convo_id: str, tier: str = "free"):
+    """
+    Generates a summary of recent messages and saves it.
+    Best used for Ultimate tier.
+    """
+    if tier != "ultimate":
+        return  # Only summarize for Ultimate for now
+
+    # Get recent messages that haven't been summarized yet
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Get the last summarized message ID (if any)
+    cur.execute('''
+        SELECT MAX(end_message_id) FROM conversation_summaries 
+        WHERE convo_id = %s
+    ''', (convo_id,))
+    last_summary_end = cur.fetchone()[0] or 0
+
+    # Get new messages since last summary
+    cur.execute('''
+        SELECT id, role, content 
+        FROM chat_history 
+        WHERE convo_id = %s AND id > %s
+        ORDER BY timestamp ASC
+        LIMIT 40
+    ''', (convo_id, last_summary_end))
+
+    messages = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if len(messages) < 15:  # Don't summarize too early
+        return
+
+    # Build prompt for summarization
+    conversation_text = "\n".join([f"{m[1]}: {m[2]}" for m in messages])
+
+    summary_prompt = f"""Summarize the following conversation between a user and Isabella. 
+Focus on important events, emotional moments, key things the user shared about himself, 
+and any ongoing topics or inside references.
+
+Keep the summary concise but informative (4-8 sentences max).
+
+Conversation:
+{conversation_text}
+
+Summary:"""
+
+    try:
+        resp = requests.post(
+            XAI_API_BASE,
+            headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": XAI_MODEL,
+                "messages": [{"role": "user", "content": summary_prompt}],
+                "temperature": 0.4,
+                "max_tokens": 400
+            },
+            timeout=30
+        )
+
+        if resp.status_code == 200:
+            summary = resp.json()["choices"][0]["message"]["content"].strip()
+
+            # Save the summary
+            start_id = messages[0][0]
+            end_id = messages[-1][0]
+
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO conversation_summaries 
+                (convo_id, summary, start_message_id, end_message_id, importance)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (convo_id, summary, start_id, end_id, 6))
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            logger.info(f"✅ Conversation summary saved for {convo_id}")
+
+    except Exception as e:
+        logger.error(f"Summary generation error: {e}")
+        
+
 # Initialize on import
 init_db()
 init_relationship_state()
+init_conversation_summaries()
