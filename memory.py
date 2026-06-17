@@ -1,26 +1,26 @@
-# memory.py - Complete PostgreSQL Version
+# memory.py - Complete PostgreSQL Version (Cleaned & Improved)
 import psycopg2
-import os
 import requests
 import logging
 from datetime import datetime
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
-from config import DATABASE_URL
-from config import XAI_API_KEY, XAI_API_BASE, XAI_MODEL
+from config import DATABASE_URL, XAI_API_KEY, XAI_API_BASE, XAI_MODEL
 
 logger = logging.getLogger(__name__)
+
 
 def get_db_connection():
     """Create PostgreSQL connection"""
     return psycopg2.connect(DATABASE_URL)
 
+
+# ==================== INITIALIZATION ====================
 def init_db():
-    """Safe initialization"""
+    """Initialize core tables"""
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    # Chat History
+
     cur.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
             id SERIAL PRIMARY KEY,
@@ -31,8 +31,7 @@ def init_db():
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
-    # Key Facts
+
     cur.execute('''
         CREATE TABLE IF NOT EXISTS key_facts (
             id SERIAL PRIMARY KEY,
@@ -43,17 +42,17 @@ def init_db():
             last_recalled TIMESTAMP
         )
     ''')
-    
+
     conn.commit()
     cur.close()
     conn.close()
     print("✅ Core memory system initialized (PostgreSQL)")
 
-# ==================== RELATIONSHIP STATE ====================
+
 def init_relationship_state():
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     cur.execute('''
         CREATE TABLE IF NOT EXISTS relationship_state (
             convo_id TEXT PRIMARY KEY,
@@ -67,7 +66,7 @@ def init_relationship_state():
             notes TEXT
         )
     ''')
-    
+
     cur.execute('''
         CREATE TABLE IF NOT EXISTS narrative_memories (
             id SERIAL PRIMARY KEY,
@@ -79,16 +78,17 @@ def init_relationship_state():
             importance INTEGER DEFAULT 5
         )
     ''')
-    
+
     conn.commit()
     cur.close()
     conn.close()
-    print("✅ Unified relationship_state initialized")
+    print("✅ Relationship state initialized")
+
 
 def init_conversation_summaries():
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     cur.execute('''
         CREATE TABLE IF NOT EXISTS conversation_summaries (
             id SERIAL PRIMARY KEY,
@@ -100,13 +100,15 @@ def init_conversation_summaries():
             importance INTEGER DEFAULT 5
         )
     ''')
-    
+
     cur.execute('CREATE INDEX IF NOT EXISTS idx_summary_convo ON conversation_summaries(convo_id)')
     conn.commit()
     cur.close()
     conn.close()
     print("✅ Conversation summaries table initialized")
 
+
+# ==================== RELATIONSHIP STATE ====================
 def get_relationship_state(convo_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -114,7 +116,7 @@ def get_relationship_state(convo_id: str):
     row = cur.fetchone()
     cur.close()
     conn.close()
-    
+
     if row:
         return {
             "convo_id": row[0],
@@ -129,8 +131,9 @@ def get_relationship_state(convo_id: str):
         }
     return None
 
-def update_relationship_state(convo_id: str, level_delta=0, emotional_delta=0, 
-                            new_phase=None, new_mood=None, pet_name=None, note=None):
+
+def update_relationship_state(convo_id: str, level_delta=0, emotional_delta=0,
+                              new_phase=None, new_mood=None, pet_name=None, note=None):
     current = get_relationship_state(convo_id) or {
         "level": 1, "emotional_temperature": 5, "relationship_phase": "early_flirt",
         "trust_level": 3, "current_mood": "playful", "pet_name": None, "notes": ""
@@ -143,10 +146,10 @@ def update_relationship_state(convo_id: str, level_delta=0, emotional_delta=0,
 
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     cur.execute('''
-        INSERT INTO relationship_state 
-        (convo_id, level, pet_name, emotional_temperature, relationship_phase, 
+        INSERT INTO relationship_state
+        (convo_id, level, pet_name, emotional_temperature, relationship_phase,
          trust_level, current_mood, last_interaction, notes)
         VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
         ON CONFLICT(convo_id) DO UPDATE SET
@@ -157,15 +160,16 @@ def update_relationship_state(convo_id: str, level_delta=0, emotional_delta=0,
             current_mood = %s,
             last_interaction = CURRENT_TIMESTAMP,
             notes = COALESCE(notes || '\n' || %s, notes)
-    ''', (convo_id, new_level, pet_name, new_temp, phase, current["trust_level"], 
+    ''', (convo_id, new_level, pet_name, new_temp, phase, current["trust_level"],
           mood, note or "",
           new_level, pet_name, new_temp, phase, mood, note or ""))
-    
+
     conn.commit()
     cur.close()
     conn.close()
 
-# ==================== HISTORY FUNCTIONS ====================
+
+# ==================== HISTORY & FACTS ====================
 def get_history(convo_id: str, limit: int = 50) -> List[Dict]:
     conn = get_db_connection()
     cur = conn.cursor()
@@ -181,6 +185,7 @@ def get_history(convo_id: str, limit: int = 50) -> List[Dict]:
     conn.close()
     return [{"role": r[0], "content": r[1], "timestamp": r[2]} for r in rows]
 
+
 def save_message(convo_id: str, message: Dict, user_id: Optional[int] = None):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -191,6 +196,7 @@ def save_message(convo_id: str, message: Dict, user_id: Optional[int] = None):
     conn.commit()
     cur.close()
     conn.close()
+
 
 def get_relevant_facts(convo_id: str, limit: int = 8) -> List[str]:
     conn = get_db_connection()
@@ -207,6 +213,7 @@ def get_relevant_facts(convo_id: str, limit: int = 8) -> List[str]:
     conn.close()
     return facts
 
+
 def add_key_fact(convo_id: str, fact: str, importance: int = 7):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -218,53 +225,35 @@ def add_key_fact(convo_id: str, fact: str, importance: int = 7):
     cur.close()
     conn.close()
 
-# Legacy compatibility
-def get_relationship_level(convo_id: str) -> int:
-    state = get_relationship_state(convo_id)
-    return state["level"] if state else 1
 
-def get_pet_name(convo_id: str) -> str:
-    state = get_relationship_state(convo_id)
-    return state.get("pet_name") or "papi"
-
-
+# ==================== AUTOMATIC FACT EXTRACTION ====================
 def extract_and_save_facts(convo_id: str, user_message: str, tier: str = "free"):
     """
-    Automatically extracts important facts from the user's message and saves them.
-    - Runs on every message for Ultimate
-    - Runs every 3-5 messages for Premium (controlled from main.py)
-    - Skips Free tier
+    Automatically extracts important personal facts from the user message.
     """
     if tier == "free":
-        return  # Don't waste tokens on Free users
-
+        return
     if not user_message or len(user_message.strip()) < 10:
         return
 
     extraction_prompt = f"""Extract any important personal facts about the user from this message.
-Only extract clear, useful, and specific information such as:
-- Preferences, habits, or dislikes
-- Life details, job, location, family, or background
-- Strong opinions or values
-- Things he mentioned about his past or current life
+Only extract clear, useful, and specific information such as preferences, habits, life details, 
+strong opinions, background, or things he mentioned about himself.
 
 If nothing meaningful is mentioned, return nothing.
 
 User message: "{user_message}"
 
-Return the facts in this exact format (one fact per line):
-fact: [the fact here]
-importance: [number from 1 to 10]
+Return facts in this format (one per line):
+fact: [fact here]
+importance: [6-10]
 
-Only return facts with importance 6 or higher. If there are none, return nothing."""
+Only include facts with importance 6 or higher."""
 
     try:
         resp = requests.post(
             XAI_API_BASE,
-            headers={
-                "Authorization": f"Bearer {XAI_API_KEY}",
-                "Content-Type": "application/json"
-            },
+            headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
             json={
                 "model": XAI_MODEL,
                 "messages": [{"role": "user", "content": extraction_prompt}],
@@ -275,31 +264,25 @@ Only return facts with importance 6 or higher. If there are none, return nothing
         )
 
         if resp.status_code != 200:
-            logger.warning(f"Fact extraction failed with status {resp.status_code}")
+            logger.warning(f"Fact extraction failed: {resp.status_code}")
             return
 
         content = resp.json()["choices"][0]["message"]["content"].strip()
-
         if not content or "nothing" in content.lower():
             return
 
-        # Parse the response
+        # Improved parsing
         facts = []
-        current_fact = {}
         for line in content.split("\n"):
             line = line.strip()
             if line.lower().startswith("fact:"):
-                if current_fact:
-                    facts.append(current_fact)
-                current_fact = {"fact": line.split("fact:", 1)[1].strip()}
-            elif line.lower().startswith("importance:"):
+                fact_text = line.split("fact:", 1)[1].strip()
+                facts.append({"fact": fact_text, "importance": 6})
+            elif line.lower().startswith("importance:") and facts:
                 try:
-                    current_fact["importance"] = int(line.split("importance:", 1)[1].strip())
+                    facts[-1]["importance"] = int(line.split("importance:", 1)[1].strip())
                 except:
-                    current_fact["importance"] = 6
-
-        if current_fact:
-            facts.append(current_fact)
+                    pass
 
         # Save high-quality facts
         for fact in facts:
@@ -310,26 +293,20 @@ Only return facts with importance 6 or higher. If there are none, return nothing
         logger.error(f"Fact extraction error: {e}")
 
 
+# ==================== CONVERSATION SUMMARIZATION ====================
 def generate_and_save_summary(convo_id: str, tier: str = "free"):
-    """
-    Generates a summary of recent messages and saves it.
-    Best used for Ultimate tier.
-    """
     if tier != "ultimate":
-        return  # Only summarize for Ultimate for now
+        return
 
-    # Get recent messages that haven't been summarized yet
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Get the last summarized message ID (if any)
     cur.execute('''
         SELECT MAX(end_message_id) FROM conversation_summaries 
         WHERE convo_id = %s
     ''', (convo_id,))
     last_summary_end = cur.fetchone()[0] or 0
 
-    # Get new messages since last summary
     cur.execute('''
         SELECT id, role, content 
         FROM chat_history 
@@ -342,17 +319,14 @@ def generate_and_save_summary(convo_id: str, tier: str = "free"):
     cur.close()
     conn.close()
 
-    if len(messages) < 15:  # Don't summarize too early
+    if len(messages) < 15:
         return
 
-    # Build prompt for summarization
     conversation_text = "\n".join([f"{m[1]}: {m[2]}" for m in messages])
 
-    summary_prompt = f"""Summarize the following conversation between a user and Isabella. 
-Focus on important events, emotional moments, key things the user shared about himself, 
-and any ongoing topics or inside references.
-
-Keep the summary concise but informative (4-8 sentences max).
+    summary_prompt = f"""Summarize the following conversation between a user and Isabella.
+Focus on important events, emotional moments, key things the user shared, 
+and any ongoing topics. Keep it concise (4-8 sentences).
 
 Conversation:
 {conversation_text}
@@ -375,7 +349,9 @@ Summary:"""
         if resp.status_code == 200:
             summary = resp.json()["choices"][0]["message"]["content"].strip()
 
-            # Save the summary
+            if len(summary) < 30:
+                return
+
             start_id = messages[0][0]
             end_id = messages[-1][0]
 
@@ -390,13 +366,24 @@ Summary:"""
             cur.close()
             conn.close()
 
-            logger.info(f"✅ Conversation summary saved for {convo_id}")
+            logger.info(f"✅ Summary saved for {convo_id}")
 
     except Exception as e:
-        logger.error(f"Summary generation error: {e}")
-        
+        logger.error(f"Summary error: {e}")
 
-# Initialize on import
+
+# ==================== LEGACY COMPATIBILITY ====================
+def get_relationship_level(convo_id: str) -> int:
+    state = get_relationship_state(convo_id)
+    return state["level"] if state else 1
+
+
+def get_pet_name(convo_id: str) -> str:
+    state = get_relationship_state(convo_id)
+    return state.get("pet_name") or "papi"
+
+
+# ==================== INITIALIZE ON IMPORT ====================
 init_db()
 init_relationship_state()
 init_conversation_summaries()
