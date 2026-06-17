@@ -47,7 +47,8 @@ from prompt import get_system_prompt
 from postprocess import clean_reply
 from memory import (
     get_history, save_message, get_relevant_facts,
-    get_relationship_level, get_pet_name
+    get_relationship_level, get_pet_name,
+    extract_and_save_facts   
 )
 from analytics import log_event, get_live_stats
 from auth import register_user, authenticate_user, create_access_token, get_current_user, get_db_connection, ensure_users_table, update_user_subscription
@@ -374,6 +375,17 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         # Save user message
         if user_message:
             save_message(convo_id, {"role": "user", "content": user_message}, user_id=user.get("id"))
+        
+            # ==================== AUTOMATIC FACT EXTRACTION ====================
+            tier = user.get("subscription_tier", "free").lower()
+        
+            if tier == "ultimate":
+                extract_and_save_facts(convo_id, user_message, tier)
+        
+            elif tier == "premium":
+                import random
+                if random.randint(1, 4) == 1:
+                    extract_and_save_facts(convo_id, user_message, tier)
 
         # === Get Relationship State & History ===
         state = get_relationship_state(convo_id)
