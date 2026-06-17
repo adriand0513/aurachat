@@ -12,13 +12,14 @@ from typing import Dict, List
 from collections import defaultdict
 import json
 import stripe
-
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Body, WebSocket, WebSocketDisconnect, Depends, status
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 import uvicorn
 import asyncio
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # ==================== PERMANENT GLOBAL FIX ====================
 class DateTimeJSONResponse(JSONResponse):
@@ -52,20 +53,20 @@ from memory import (
     get_relationship_level,
     get_pet_name,
     extract_and_save_facts,
-    generate_and_save_summary   # ← Add this
+    generate_and_save_summary
 )
 from analytics import log_event, get_live_stats
 from auth import register_user, authenticate_user, create_access_token, get_current_user, get_db_connection, ensure_users_table, update_user_subscription
-from archetype import detect_archetype
-
 from relationship_state import (
     get_relationship_state,
     update_relationship_state,
     add_narrative_moment
 )
-
 from payment import router as payment_router
+from voice import generate_voice_note
+from proactive import should_send_proactive, generate_proactive_message
 
+scheduler = BackgroundScheduler()
 
 logger.info(f"Starting Isabella server - {datetime.now().isoformat()}")
 
@@ -88,6 +89,75 @@ def is_rate_limited(convo_id: str, max_per_minute: int = 20) -> bool:
     convo_rate_limits[convo_id] = [t for t in convo_rate_limits[convo_id] if now - t < 60]
     convo_rate_limits[convo_id].append(now)
     return len(convo_rate_limits[convo_id]) > max_per_minute
+
+def get_all_ultimate_users():
+    """
+    TODO: Implement this function to return Ultimate users with:
+    user_id, convo_id, last_message_time
+    """
+    return []  # Placeholder - implement later
+
+def run_proactive_messages():
+    print("Running proactive message check...")
+
+    ultimate_users = get_all_ultimate_users()
+
+    for user in ultimate_users:
+        try:
+            convo_id = user["convo_id"]
+            last_message_time = user["last_message_time"]
+            tier = "ultimate"
+
+            if should_send_proactive(convo_id, last_message_time, tier):
+                message = generate_proactive_message(
+                    convo_id=convo_id,
+                    tier=tier,
+                    generate_llm_response_func=generate_llm_response,  # type: ignore
+                    postprocess_func=postprocess                         # type: ignore
+                )
+
+                if message:
+                    # TODO: Replace this with your actual way of sending messages
+                    print(f"[PROACTIVE] Sent to user {user['user_id']}: {message}")
+
+        except Exception as e:
+            logger.error(f"Error processing proactive message for user {user.get('user_id')}: {e}")
+
+def get_all_ultimate_users():
+    """
+    Returns a list of Ultimate users with their user_id, convo_id, and last_message_time.
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT 
+                u.id AS user_id,
+                CONCAT('user_', u.id) AS convo_id,
+                COALESCE(MAX(ch.timestamp), u.created_at) AS last_message_time
+            FROM users u
+            LEFT JOIN chat_history ch ON ch.user_id = u.id
+            WHERE LOWER(u.subscription_tier) = 'ultimate'
+            GROUP BY u.id, u.created_at
+        """)
+
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                "user_id": row[0],
+                "convo_id": row[1],
+                "last_message_time": row[2]
+            })
+
+        cur.close()
+        conn.close()
+        return users
+
+    except Exception as e:
+        logger.error(f"Error fetching ultimate users: {e}")
+        return []
+
 
 # ── NYC Context ─────────────────────────────────
 def get_nyc_context() -> Dict[str, str]:
@@ -151,14 +221,13 @@ async def get_chat_history(user: dict = Depends(get_current_user)):
 
 @app.get("/api/usage")
 async def get_usage(user: dict = Depends(get_current_user)):
-    """Return daily message usage for the current user"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT COUNT(*) 
-            FROM chat_history 
-            WHERE user_id = %s 
+            SELECT COUNT(*)
+            FROM chat_history
+            WHERE user_id = %s
               AND DATE(timestamp) = CURRENT_DATE
               AND role = 'user'
         """, (user["id"],))
@@ -166,18 +235,20 @@ async def get_usage(user: dict = Depends(get_current_user)):
         cur.close()
         conn.close()
 
+        tier = user.get("subscription_tier", "free").lower()
+        daily_limit = 10 if tier == "free" else 9999
+
         return {
             "daily_count": daily_count,
-            "daily_limit": 30 if user.get("subscription_tier", "free").lower() == "free" else 9999,
-            "remaining": max(0, 30 - daily_count) if user.get("subscription_tier", "free").lower() == "free" else "unlimited"
+            "daily_limit": daily_limit,
+            "remaining": max(0, 10 - daily_count) if tier == "free" else "unlimited"
         }
     except Exception as e:
         logger.error(f"Usage endpoint error: {e}")
-        return {"daily_count": 0, "daily_limit": 30, "remaining": 30}
+        return {"daily_count": 0, "daily_limit": 10, "remaining": 10}
 
 @app.get("/auth/me")
 async def get_current_user_info(user: dict = Depends(get_current_user)):
-    """Return fresh user data including subscription tier"""
     return {
         "id": user["id"],
         "email": user["email"],
@@ -200,13 +271,26 @@ async def payment_success(session_id: str = None):
                 setTimeout(() => window.location.href = '/', 2500);
             </script>
         """)
+    
+# ── Test Proactive Messages (Admin Only) ─────────────────────────────
+@app.get("/api/test/proactive")
+async def test_proactive_messages(token: str = None):
+    """
+    Manually trigger the proactive message check for testing.
+    Only accessible with the admin token.
+    """
+    if token != ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    try:
+        run_proactive_messages()
+        return {"message": "Proactive message check triggered successfully"}
+    except Exception as e:
+        logger.error(f"Test proactive error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
-    """
-    Serve voice note audio files from the persistent disk.
-    """
-    # Basic security: only allow .mp3 files and prevent directory traversal
     if not filename.endswith(".mp3") or ".." in filename or "/" in filename:
         raise HTTPException(status_code=400, detail="Invalid file")
 
@@ -231,7 +315,6 @@ async def admin_all_chats(token: str = None):
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
        
-        # Get all chats summary
         cur.execute('''
             SELECT
                 u.email,
@@ -250,7 +333,6 @@ async def admin_all_chats(token: str = None):
             convo_id = row[1]
             message_count = row[3]
            
-            # Fetch ALL messages (no LIMIT) or a high reasonable limit
             cur.execute('''
                 SELECT role, content, timestamp
                 FROM chat_history
@@ -259,11 +341,7 @@ async def admin_all_chats(token: str = None):
             ''', (convo_id,))
            
             messages = [
-                {
-                    "role": m[0], 
-                    "content": m[1], 
-                    "time": str(m[2])
-                } 
+                {"role": m[0], "content": m[1], "time": str(m[2])} 
                 for m in cur.fetchall()
             ]
            
@@ -272,7 +350,7 @@ async def admin_all_chats(token: str = None):
                 "convo_id": convo_id,
                 "last_message_at": str(row[2]),
                 "message_count": message_count,
-                "messages": messages   # Now returns ALL messages
+                "messages": messages
             })
        
         cur.close()
@@ -306,7 +384,7 @@ async def admin_dashboard(token: str = None):
         logger.error(f"Dashboard error: {e}")
         return HTMLResponse("<h1>Dashboard not found</h1>", 404)
 
-# ── Analytics & Monitor WebSockets (unchanged for now)
+# ── Analytics & Monitor WebSockets
 @app.websocket("/ws/analytics")
 async def analytics_websocket(websocket: WebSocket, token: str = None):
     if token != ADMIN_TOKEN:
@@ -358,7 +436,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     if not convo_id:
         raise HTTPException(400, "convo_id required")
 
-    # ==================== TIER ENFORCEMENT ====================
     tier = user.get("subscription_tier", "free").lower()
     is_premium = tier in ["premium", "ultimate"]
 
@@ -387,7 +464,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 ]
             }
 
-    # ── Rate Limiting ─────────────────────────────────────
     now = time.time()
     if now - last_reply_time.get(convo_id, 0) < REPLY_COOLDOWN_SECONDS:
         return {"replies": []}
@@ -397,11 +473,9 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         return {"replies": []}
 
     try:
-        # Save user message
         if user_message:
             save_message(convo_id, {"role": "user", "content": user_message}, user_id=user.get("id"))
 
-            # ==================== AUTOMATIC FACT EXTRACTION ====================
             if tier == "ultimate":
                 extract_and_save_facts(convo_id, user_message, tier)
             elif tier == "premium":
@@ -409,11 +483,9 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 if random.randint(1, 4) == 1:
                     extract_and_save_facts(convo_id, user_message, tier)
 
-        # === Get Relationship State & History ===
         state = get_relationship_state(convo_id)
         history = get_history(convo_id)
 
-        # Sanitize history for xAI
         def sanitize_for_json(data):
             if isinstance(data, list):
                 return [sanitize_for_json(item) for item in data]
@@ -424,11 +496,8 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             return data
 
         clean_history = sanitize_for_json(history)
-
-        # Get NYC context
         context = get_nyc_context()
 
-        # === Build System Prompt with Tier Awareness ===
         system_prompt = get_system_prompt(
             user_name=user.get("full_name"),
             current_time=context.get("time", ""),
@@ -436,7 +505,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             tier=tier
         )
 
-        # Add relevant facts
         relevant_facts = get_relevant_facts(convo_id, limit=5)
         if relevant_facts:
             system_prompt += f"\n\nKey facts about him: {' | '.join(relevant_facts[:4])}"
@@ -449,7 +517,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         messages = [{"role": "system", "content": system_prompt}] + clean_history[-12:]
 
-        # ── Call xAI ─────────────────────────────────────
         raw_reply = None
         for attempt in range(2):
             try:
@@ -478,13 +545,11 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         bubbles = split_into_bubbles(clean_reply(raw_reply))
 
-        # Save assistant replies
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user.get("id"))
 
         # ==================== VOICE GENERATION ====================
         voice_url = None
-
         if tier in ["premium", "ultimate"]:
             try:
                 last_reply = bubbles[-1] if bubbles else ""
@@ -505,7 +570,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         duration_ms = int((time.time() - start_time) * 1000)
         log_event("response_generated", convo_id, user_id=user.get("id"), duration_ms=duration_ms)
 
-        # === Update Relationship State ===
         emotional_delta = 1 if any(word in user_message.lower() for word in ["miss", "want", "love", "beautiful", "hot", "sexy"]) else 0
 
         update_relationship_state(
@@ -524,7 +588,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 importance=6
             )
 
-        # Return response
         response = {"replies": bubbles}
         if voice_url:
             response["voice_url"] = voice_url
@@ -534,6 +597,12 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     except Exception as e:
         logger.error(f"💥 Unexpected error in /api/reply: {e}", exc_info=True)
         return {"replies": []}
+
+
+# Start background scheduler
+scheduler.add_job(run_proactive_messages, 'interval', hours=6)
+scheduler.start()
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
