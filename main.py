@@ -125,7 +125,10 @@ def run_proactive_messages():
 
 def get_all_ultimate_users():
     """
-    Returns a list of Ultimate users with their user_id, convo_id, and last_message_time.
+    Returns a list of Ultimate tier users with:
+    - user_id
+    - convo_id (formatted as 'user_{id}')
+    - last_message_time (most recent message or account creation time)
     """
     try:
         conn = get_db_connection()
@@ -138,8 +141,9 @@ def get_all_ultimate_users():
                 COALESCE(MAX(ch.timestamp), u.created_at) AS last_message_time
             FROM users u
             LEFT JOIN chat_history ch ON ch.user_id = u.id
-            WHERE LOWER(u.subscription_tier) = 'ultimate'
+            WHERE LOWER(COALESCE(u.subscription_tier, 'free')) = 'ultimate'
             GROUP BY u.id, u.created_at
+            ORDER BY last_message_time DESC
         """)
 
         users = []
@@ -152,6 +156,8 @@ def get_all_ultimate_users():
 
         cur.close()
         conn.close()
+
+        logger.info(f"Found {len(users)} ultimate users for proactive check")
         return users
 
     except Exception as e:
