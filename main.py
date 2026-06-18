@@ -131,7 +131,7 @@ def run_proactive_messages():
 
 def get_all_ultimate_users():
     """
-    Returns a list of Ultimate tier users with:
+    Returns all users with 'ultimate' subscription tier along with:
     - user_id
     - convo_id (formatted as 'user_{id}')
     - last_message_time (most recent message or account creation time)
@@ -149,6 +149,7 @@ def get_all_ultimate_users():
             LEFT JOIN chat_history ch ON ch.user_id = u.id
             WHERE LOWER(COALESCE(u.subscription_tier, 'free')) = 'ultimate'
             GROUP BY u.id, u.created_at
+            HAVING COALESCE(MAX(ch.timestamp), u.created_at) IS NOT NULL
             ORDER BY last_message_time DESC
         """)
 
@@ -163,13 +164,12 @@ def get_all_ultimate_users():
         cur.close()
         conn.close()
 
-        logger.info(f"Found {len(users)} ultimate users for proactive check")
+        logger.info(f"Found {len(users)} ultimate users")
         return users
 
     except Exception as e:
         logger.error(f"Error fetching ultimate users: {e}")
         return []
-
 
 # ── NYC Context ─────────────────────────────────
 def get_nyc_context() -> Dict[str, str]:
