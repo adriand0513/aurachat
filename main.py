@@ -517,9 +517,9 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             tier=tier
         )
 
-        relevant_facts = get_relevant_facts(convo_id, limit=5)
+        relevant_facts = get_relevant_facts(convo_id, limit=3)  # Reduced from 5
         if relevant_facts:
-            system_prompt += f"\n\nKey facts about him: {' | '.join(relevant_facts[:4])}"
+            system_prompt += f"\n\nImportant things about him: {' | '.join(relevant_facts)}"
 
         rel_level = state.get("level", 1) if state else 1
         pet_name = state.get("pet_name") if state else None
