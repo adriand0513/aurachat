@@ -1,6 +1,7 @@
-# memory.py - Complete PostgreSQL Version (Cleaned & Improved)
+# memory.py - Complete PostgreSQL Version (Cleaned & Improved + Layer 3)
 import psycopg2
 import requests
+import json
 import logging
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -106,6 +107,67 @@ def init_conversation_summaries():
     cur.close()
     conn.close()
     print("✅ Conversation summaries table initialized")
+
+
+# ==================== LAYER 3: RECENT RESPONSE TRACKING ====================
+def init_recent_responses():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS recent_responses (
+            convo_id TEXT PRIMARY KEY,
+            messages TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("✅ Recent responses table initialized")
+
+
+def save_recent_response(convo_id: str, assistant_message: str):
+    """Save the latest assistant message. Keeps only the last 4 messages."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT messages FROM recent_responses WHERE convo_id = %s", (convo_id,))
+    row = cur.fetchone()
+
+    if row:
+        messages = json.loads(row[0])
+        messages.append(assistant_message)
+        messages = messages[-4:]  # Keep only last 4
+    else:
+        messages = [assistant_message]
+
+    cur.execute('''
+        INSERT INTO recent_responses (convo_id, messages, updated_at)
+        VALUES (%s, %s, CURRENT_TIMESTAMP)
+        ON CONFLICT (convo_id)
+        DO UPDATE SET messages = %s, updated_at = CURRENT_TIMESTAMP
+    ''', (convo_id, json.dumps(messages), json.dumps(messages)))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_recent_responses(convo_id: str) -> list:
+    """Get the last 4 assistant messages."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT messages FROM recent_responses WHERE convo_id = %s", (convo_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if row:
+        return json.loads(row[0])
+    return []
 
 
 # ==================== RELATIONSHIP STATE ====================
@@ -228,16 +290,13 @@ def add_key_fact(convo_id: str, fact: str, importance: int = 7):
 
 # ==================== AUTOMATIC FACT EXTRACTION ====================
 def extract_and_save_facts(convo_id: str, user_message: str, tier: str = "free"):
-    """
-    Automatically extracts important personal facts from the user message.
-    """
     if tier == "free":
         return
     if not user_message or len(user_message.strip()) < 10:
         return
 
     extraction_prompt = f"""Extract any important personal facts about the user from this message.
-Only extract clear, useful, and specific information such as preferences, habits, life details, 
+Only extract clear, useful, and specific information such as preferences, habits, life details,
 strong opinions, background, or things he mentioned about himself.
 
 If nothing meaningful is mentioned, return nothing.
@@ -271,7 +330,6 @@ Only include facts with importance 6 or higher."""
         if not content or "nothing" in content.lower():
             return
 
-        # Improved parsing
         facts = []
         for line in content.split("\n"):
             line = line.strip()
@@ -284,7 +342,6 @@ Only include facts with importance 6 or higher."""
                 except:
                     pass
 
-        # Save high-quality facts
         for fact in facts:
             if fact.get("fact") and fact.get("importance", 0) >= 6:
                 add_key_fact(convo_id, fact["fact"], fact["importance"])
@@ -325,7 +382,7 @@ def generate_and_save_summary(convo_id: str, tier: str = "free"):
     conversation_text = "\n".join([f"{m[1]}: {m[2]}" for m in messages])
 
     summary_prompt = f"""Summarize the following conversation between a user and Isabella.
-Focus on important events, emotional moments, key things the user shared, 
+Focus on important events, emotional moments, key things the user shared,
 and any ongoing topics. Keep it concise (4-8 sentences).
 
 Conversation:
@@ -387,3 +444,4 @@ def get_pet_name(convo_id: str) -> str:
 init_db()
 init_relationship_state()
 init_conversation_summaries()
+init_recent_responses()
