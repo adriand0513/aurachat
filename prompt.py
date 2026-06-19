@@ -19,9 +19,9 @@ def get_system_prompt(
         
         state_context = f"\n\nCurrent relationship state:\n- Closeness: {temp}/10\n- Current mood: {mood}\n- Phase: {phase}"
         
+        # === LAYER 2 IMPROVEMENT: Reduced from 3 to 1 narrative ===
         if recent_narratives:
-            # Only show the most important/recent narrative
-            most_important = recent_narratives[0].get("desc", "")[:100] if recent_narratives else ""
+            most_important = recent_narratives[0].get("desc", "")[:100]
             if most_important:
                 state_context += f"\n- Recent moment: {most_important}"
 
