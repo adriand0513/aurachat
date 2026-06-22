@@ -513,20 +513,24 @@
         
                 const data = await res.json();
         
-                // Send normal text replies
-                if (data.replies && data.replies.length > 0) {
+                // Handle text replies safely
+                if (data.replies && Array.isArray(data.replies)) {
                     data.replies.forEach(bubble => {
-                        addMessage(bubble, 'received');
+                        if (bubble) addMessage(bubble, 'received');
                     });
                 }
         
-                // Send voice note as its own separate message (no text transcript)
+                // Handle voice message (new format)
                 if (data.voice_message && data.voice_message.voice_url) {
                     addVoiceMessageOnly(data.voice_message.voice_url);
+                } 
+                // Fallback for old format (if backend still returns voice_url directly)
+                else if (data.voice_url) {
+                    addVoiceMessageOnly(data.voice_url);
                 }
         
             } catch (err) {
-                console.error(err);
+                console.error("SendToBackend error:", err);
             } finally {
                 hideTyping();
                 isSending = false;
