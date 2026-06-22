@@ -517,7 +517,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             tier=tier
         )
 
-        relevant_facts = get_relevant_facts(convo_id, limit=3)  # Reduced from 5
+        relevant_facts = get_relevant_facts(convo_id, limit=3)
         if relevant_facts:
             system_prompt += f"\n\nImportant things about him: {' | '.join(relevant_facts)}"
 
@@ -557,16 +557,20 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         bubbles = split_into_bubbles(clean_reply(raw_reply))
 
+        # Save assistant replies
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user.get("id"))
 
-        # ==================== VOICE GENERATION ====================
+        # ==================== VOICE GENERATION (Improved) ====================
         voice_url = None
+
         if tier in ["premium", "ultimate"]:
             try:
-                last_reply = bubbles[-1] if bubbles else ""
-                if len(last_reply) > 15:
-                    voice_url = generate_voice_note(last_reply, tier=tier)
+                # Use the full final reply instead of just the last bubble
+                final_text = " ".join(bubbles) if bubbles else ""
+
+                if len(final_text) > 15:
+                    voice_url = generate_voice_note(final_text, tier=tier)
             except Exception as e:
                 logger.error(f"Voice generation error: {e}")
 
