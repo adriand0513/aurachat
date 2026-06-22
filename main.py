@@ -117,24 +117,21 @@ def run_proactive_messages():
                 )
 
                 if message:
-                    # Save the proactive message into chat history
+                    # Save the proactive message into the user's chat
                     save_message(
                         convo_id=convo_id,
                         message={"role": "assistant", "content": message},
                         user_id=user["user_id"]
                     )
 
-                    print(f"[PROACTIVE] Message sent to user {user['user_id']}: {message}")
+                    print(f"[PROACTIVE] Message sent to user {user['user_id']}")
 
         except Exception as e:
             logger.error(f"Error processing proactive message for user {user.get('user_id')}: {e}")
 
 def get_all_ultimate_users():
     """
-    Returns all users with 'ultimate' subscription tier along with:
-    - user_id
-    - convo_id (formatted as 'user_{id}')
-    - last_message_time (most recent message or account creation time)
+    Returns Ultimate users with user_id, convo_id, and last_message_time.
     """
     try:
         conn = get_db_connection()
@@ -149,7 +146,6 @@ def get_all_ultimate_users():
             LEFT JOIN chat_history ch ON ch.user_id = u.id
             WHERE LOWER(COALESCE(u.subscription_tier, 'free')) = 'ultimate'
             GROUP BY u.id, u.created_at
-            HAVING COALESCE(MAX(ch.timestamp), u.created_at) IS NOT NULL
             ORDER BY last_message_time DESC
         """)
 
@@ -163,8 +159,6 @@ def get_all_ultimate_users():
 
         cur.close()
         conn.close()
-
-        logger.info(f"Found {len(users)} ultimate users")
         return users
 
     except Exception as e:
