@@ -98,9 +98,10 @@ def get_all_ultimate_users():
     return []  # Placeholder - implement later
 
 def run_proactive_messages():
-    print("Running proactive message check...")
+    print("🔄 Running proactive message check...")
 
     ultimate_users = get_all_ultimate_users()
+    print(f"Found {len(ultimate_users)} ultimate users")
 
     for user in ultimate_users:
         try:
@@ -108,7 +109,12 @@ def run_proactive_messages():
             last_message_time = user["last_message_time"]
             tier = "ultimate"
 
+            hours_since = (datetime.datetime.now() - last_message_time).total_seconds() / 3600
+            print(f"User {user['user_id']} | Hours since last message: {hours_since:.2f}")
+
             if should_send_proactive(convo_id, last_message_time, tier):
+                print(f"✅ Sending proactive message to user {user['user_id']}")
+                
                 message = generate_proactive_message(
                     convo_id=convo_id,
                     tier=tier,
@@ -117,14 +123,16 @@ def run_proactive_messages():
                 )
 
                 if message:
-                    # Save the proactive message into the user's chat
                     save_message(
                         convo_id=convo_id,
                         message={"role": "assistant", "content": message},
                         user_id=user["user_id"]
                     )
-
-                    print(f"[PROACTIVE] Message sent to user {user['user_id']}")
+                    print(f"[PROACTIVE] Message sent successfully to user {user['user_id']}")
+                else:
+                    print(f"⚠️ No message generated for user {user['user_id']}")
+            else:
+                print(f"⏭️ Skipped user {user['user_id']} (time condition not met)")
 
         except Exception as e:
             logger.error(f"Error processing proactive message for user {user.get('user_id')}: {e}")
@@ -555,18 +563,25 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user.get("id"))
 
-        # ==================== VOICE GENERATION (Improved) ====================
+        # ==================== VOICE GENERATION ====================
         voice_url = None
-
+        
         if tier in ["premium", "ultimate"]:
             try:
-                # Use the full final reply instead of just the last bubble
                 final_text = " ".join(bubbles) if bubbles else ""
-
                 if len(final_text) > 15:
                     voice_url = generate_voice_note(final_text, tier=tier)
             except Exception as e:
                 logger.error(f"Voice generation error: {e}")
+        
+        # ==================== RESPONSE ====================
+        response = {"replies": bubbles}
+        
+        # Send voice as a separate message if available
+        if voice_url:
+            response["voice_message"] = {"voice_url": voice_url}
+        
+        return response
 
         # ==================== CONVERSATION SUMMARIZATION ====================
         if tier == "ultimate":
