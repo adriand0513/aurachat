@@ -8,41 +8,20 @@ from memory import (
 
 def should_send_proactive(convo_id: str, last_message_time, tier: str) -> bool:
     """
-    Only send proactive messages to Ultimate users,
-    and only once per day.
+    Decide if we should send a proactive message.
+    Currently only enabled for Ultimate users.
+    
+    TESTING MODE: Triggers after ~5 minutes of silence.
+    Change back to 36-72 hours for production.
     """
     if tier != "ultimate":
         return False
 
     hours_since = (datetime.datetime.now() - last_message_time).total_seconds() / 3600
 
-    # Only trigger if user has been silent for 36-72 hours
-    if not (36 < hours_since < 72):
-        return False
-
-    # Check if we already sent a proactive message today
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-            SELECT MAX(timestamp) 
-            FROM chat_history 
-            WHERE convo_id = %s 
-              AND role = 'assistant'
-        """, (convo_id,))
-
-        last_assistant_message = cur.fetchone()[0]
-        cur.close()
-        conn.close()
-
-        if last_assistant_message:
-            hours_since_last_proactive = (datetime.datetime.now() - last_assistant_message).total_seconds() / 3600
-            if hours_since_last_proactive < 24:
-                return False  # Already sent one today
-
-    except Exception as e:
-        logger.error(f"Error checking last proactive time: {e}")
+    # === TESTING VERSION ===
+    # Triggers between ~5 minutes and 2 hours of silence
+    if not (0.08 < hours_since < 2):
         return False
 
     return True
