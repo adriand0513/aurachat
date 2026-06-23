@@ -308,38 +308,49 @@
             const fullName = document.getElementById('reg-fullname').value.trim();
             const email = document.getElementById('reg-email').value.trim();
             const password = document.getElementById('reg-password').value.trim();
-       
+        
             if (!email || !password) return alert("Email and password required");
-       
+        
             try {
                 const res = await fetch('/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password, full_name: fullName })
                 });
-       
+        
                 const data = await res.json();
-       
+        
                 if (res.ok) {
-                    // Show Premium offer after successful registration
+                    // Show Premium offer screen
                     document.getElementById('register-form').style.display = 'none';
                     document.getElementById('login-form').style.display = 'none';
-       
+        
                     const authCard = document.querySelector('.auth-card');
+                    
                     authCard.innerHTML = `
                         <h2 style="color:#c300ff; margin-bottom:20px;">Welcome, ${fullName.split(" ")[0]}!</h2>
                         <p style="margin-bottom:25px; line-height:1.5;">Would you like to start with <strong>Premium</strong> for the best experience?</p>
-                       
-                        <button onclick="upgradeAfterRegister('${email}', '${password}')"
+                        
+                        <button id="upgrade-btn"
                                 style="width:100%; padding:18px; background:#6b00b3; border:none; border-radius:16px; color:white; font-size:1.1rem; margin-bottom:12px; cursor:pointer;">
                             Yes, Upgrade to Premium ($14.99/mo)
                         </button>
-                       
-                        <button onclick="showLoginAfterRegister()"
+                        
+                        <button id="skip-btn"
                                 style="width:100%; padding:14px; background:transparent; border:1px solid #666; color:#ccc; border-radius:50px; cursor:pointer;">
                             No thanks, continue with Free
                         </button>
                     `;
+        
+                    // Attach event listeners properly
+                    document.getElementById('upgrade-btn').onclick = () => {
+                        upgradeAfterRegister(email, password);
+                    };
+        
+                    document.getElementById('skip-btn').onclick = () => {
+                        showLoginAfterRegister();
+                    };
+        
                 } else {
                     alert(data.detail || "Registration failed");
                 }
