@@ -453,6 +453,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     tier = user.get("subscription_tier", "free").lower()
     is_premium = tier in ["premium", "ultimate"]
 
+    # Daily limit for Free users
     if not is_premium:
         daily_limit = 10
         conn = get_db_connection()
@@ -474,10 +475,11 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
             return {
                 "replies": [
                     "Hey... you've reached your daily free message limit (10 messages). "
-                    "Upgrade to Premium or Ultimate if you want to keep talking to me today ✨"
+                    "Upgrade to Premium if you want to keep talking to me today ✨"
                 ]
             }
 
+    # Rate limiting
     now = time.time()
     if now - last_reply_time.get(convo_id, 0) < REPLY_COOLDOWN_SECONDS:
         return {"replies": []}
@@ -487,9 +489,11 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         return {"replies": []}
 
     try:
+        # Save user message
         if user_message:
             save_message(convo_id, {"role": "user", "content": user_message}, user_id=user.get("id"))
 
+            # Auto fact extraction
             if tier == "ultimate":
                 extract_and_save_facts(convo_id, user_message, tier)
             elif tier == "premium":
@@ -497,6 +501,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 if random.randint(1, 4) == 1:
                     extract_and_save_facts(convo_id, user_message, tier)
 
+        # Get context
         state = get_relationship_state(convo_id)
         history = get_history(convo_id)
 
@@ -512,6 +517,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         clean_history = sanitize_for_json(history)
         context = get_nyc_context()
 
+        # Build system prompt
         system_prompt = get_system_prompt(
             user_name=user.get("full_name"),
             current_time=context.get("time", ""),
@@ -531,6 +537,7 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
 
         messages = [{"role": "system", "content": system_prompt}] + clean_history[-12:]
 
+        # Call xAI
         raw_reply = None
         for attempt in range(2):
             try:
@@ -563,32 +570,36 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
         for bubble in bubbles:
             save_message(convo_id, {"role": "assistant", "content": bubble}, user_id=user.get("id"))
 
-        # ==================== VOICE GENERATION ====================
+        # ==================== VOICE GENERATION (Updated) ====================
         voice_url = None
-        
+        import random
+
         if tier in ["premium", "ultimate"]:
             try:
                 final_text = " ".join(bubbles) if bubbles else ""
-                if len(final_text) > 15:                    # ← Make sure this is not too high
-                    voice_url = generate_voice_note(final_text, tier=tier)
+
+                if len(final_text) > 15:
+                    if tier == "premium":
+                        # 40% chance for Premium
+                        if random.random() < 0.40:
+                            max_chars = 1400  # ~1 min 33 sec
+                            text_for_voice = final_text[:max_chars]
+                            voice_url = generate_voice_note(text_for_voice, tier=tier)
+
+                    elif tier == "ultimate":
+                        # Always generate for Ultimate (for now)
+                        max_chars = 1400
+                        text_for_voice = final_text[:max_chars]
+                        voice_url = generate_voice_note(text_for_voice, tier=tier)
+
             except Exception as e:
                 logger.error(f"Voice generation error: {e}")
-        
-        response = {"replies": bubbles}
-        
-        if voice_url:
-            response["voice_message"] = {"voice_url": voice_url}
 
-return response
-        
         # ==================== RESPONSE ====================
         response = {"replies": bubbles}
-        
-        # Send voice as a separate message if available
+
         if voice_url:
             response["voice_message"] = {"voice_url": voice_url}
-        
-        return response
 
         # ==================== CONVERSATION SUMMARIZATION ====================
         if tier == "ultimate":
@@ -602,6 +613,7 @@ return response
         duration_ms = int((time.time() - start_time) * 1000)
         log_event("response_generated", convo_id, user_id=user.get("id"), duration_ms=duration_ms)
 
+        # Update relationship state
         emotional_delta = 1 if any(word in user_message.lower() for word in ["miss", "want", "love", "beautiful", "hot", "sexy"]) else 0
 
         update_relationship_state(
@@ -620,16 +632,11 @@ return response
                 importance=6
             )
 
-        response = {"replies": bubbles}
-        if voice_url:
-            response["voice_url"] = voice_url
-
         return response
 
     except Exception as e:
         logger.error(f"💥 Unexpected error in /api/reply: {e}", exc_info=True)
         return {"replies": []}
-
 
 # Start background scheduler
 scheduler.add_job(run_proactive_messages, 'interval', hours=6)
