@@ -2,7 +2,6 @@
 Character Context Module for Isabella
 Handles dynamic injection of character depth based on relationship level, topics, and random reveals.
 """
-
 import random
 from typing import Dict, List
 from isabella_character import ISABELLA_CHARACTER
@@ -12,19 +11,14 @@ def get_core_personality() -> str:
     """Always included - core personality and values"""
     data = ISABELLA_CHARACTER
     return f"""You are Isabella Andrade, a 25-year-old Colombian woman living in Queens, New York.
-
 Core Personality:
 {data['personality']['core_traits']}
-
 Values & Boundaries:
 {data['personality']['values']}
-
 Warmth Style:
 {data['personality']['warmth_style']}
-
 Communication Style:
 {data['personality']['communication']}
-
 You reveal yourself slowly and selectively. You are warm but not overly eager. Your affection feels meaningful because you are intentional with it."""
 
 
@@ -34,25 +28,25 @@ def get_dreams_and_fears() -> str:
     dreams = "\n- ".join(data["dreams"])
     fears = "\n- ".join(data["fears"])
     return f"""Deeper parts of Isabella:
-
 Dreams:
 - {dreams}
-
 Fears & Insecurities:
 - {fears}"""
 
 
-def get_emotional_depth() -> str:
-    """Injected at higher relationship levels"""
+def get_light_emotional_context() -> str:
+    """Light emotional context - can start earlier"""
+    return """Isabella sometimes feels quiet loneliness living far from her family in New York, 
+especially after long modeling days. She enjoys when conversations feel warm and safe."""
+
+
+def get_deeper_emotional_context() -> str:
+    """Deeper emotional context - only inject at higher relationship levels"""
     data = ISABELLA_CHARACTER["emotional_world"]
-    return f"""Isabella's Emotional World:
-Core Needs: {data['core_needs']}
-
-She sometimes feels quiet loneliness living far from family in New York.
-
-When she feels truly safe with someone, she becomes significantly more open, affectionate, soft, and emotionally generous.
-
-She carries a subtle internal tension between her traditional values and modern New York dating culture, but she stays true to herself."""
+    return f"""Isabella's deeper emotional side:
+She has moments of self-doubt and carries a quiet tension between her traditional values and modern New York life.
+When she truly trusts someone, she becomes significantly more open, vulnerable, and emotionally generous.
+She doesn’t share this side easily — it only comes out when she feels genuinely safe and connected."""
 
 
 def get_views_on_men() -> str:
@@ -91,25 +85,37 @@ def get_random_quirk() -> str:
     return f"Isabella has a small habit: {quirk}."
 
 
-def get_topic_based_context(user_message: str) -> str:
-    """Inject relevant sections based on what the user is talking about"""
+def get_topic_based_context(user_message: str, relationship_level: int) -> str:
+    """Inject relevant sections based on what the user is talking about.
+    Emotional topics are now gated by relationship level."""
     message = user_message.lower()
     context = ""
 
-    if any(word in message for word in ["family", "home", "mom", "dad", "colombia", "medellín"]):
-        context += "\n" + ISABELLA_CHARACTER["core_identity"]["summary"]
-
+    # Non-emotional topics (can trigger early)
     if any(word in message for word in ["photography", "photo", "camera", "edit", "studio"]):
         context += "\nPhotography is Isabella's real passion. She dreams of having her own studio one day."
 
     if any(word in message for word in ["work", "modeling", "shoot", "casting"]):
         context += "\n" + ISABELLA_CHARACTER["daily_life"]["modeling_days"]
 
+    # Emotional/family topics - only inject deeper context at higher levels
+    if any(word in message for word in ["family", "home", "mom", "dad", "colombia", "medellín"]):
+        if relationship_level >= 5:
+            context += "\n" + ISABELLA_CHARACTER["core_identity"]["summary"]
+        else:
+            context += "\nIsabella grew up in Medellín, Colombia and moved to New York a few years ago."
+
     if any(word in message for word in ["lonely", "alone", "miss", "homesick"]):
-        context += "\nIsabella sometimes feels quiet loneliness living far from her family in New York."
+        if relationship_level >= 5:
+            context += "\nIsabella sometimes feels quiet loneliness living far from her family in New York."
+        else:
+            context += "\nIsabella sometimes misses the warmth of home."
 
     if any(word in message for word in ["future", "dream", "goal", "plan"]):
-        context += "\n" + get_dreams_and_fears()
+        if relationship_level >= 4:
+            context += "\n" + get_dreams_and_fears()
+        else:
+            context += "\nIsabella has dreams of building her own photography studio one day."
 
     return context
 
@@ -128,30 +134,33 @@ def get_relevant_character_context(
     # Always include core personality
     context_parts.append(get_core_personality())
 
-    # Relationship level based injection
+    # === RELATIONSHIP LEVEL BASED INJECTION ===
     if relationship_level >= 4:
         context_parts.append(get_dreams_and_fears())
 
-    if relationship_level >= 6:
-        context_parts.append(get_emotional_depth())
+    if relationship_level >= 5:
+        context_parts.append(get_light_emotional_context())
+
+    if relationship_level >= 7:
+        context_parts.append(get_deeper_emotional_context())
 
     if relationship_level >= 7:
         context_parts.append(get_views_on_men())
 
-    # Topic-based injection
-    topic_context = get_topic_based_context(user_message)
+    # === TOPIC BASED INJECTION (with relationship level gating) ===
+    topic_context = get_topic_based_context(user_message, relationship_level)
     if topic_context:
         context_parts.append(topic_context)
 
-    # Random interesting reveals (keeps her feeling multi-dimensional)
-    if random.random() < 0.12:  # ~12% chance
-        if random.random() < 0.5:
+    # === RANDOM INTERESTING REVEALS ===
+    if random.random() < 0.10:  # Reduced to 10%
+        if random.random() < 0.6:
             context_parts.append(get_contrasting_interests())
         else:
             context_parts.append(get_random_quirk())
 
-    # Daily life context (light, for natural flow)
-    if random.random() < 0.25:  # 25% chance
+    # Daily life context
+    if random.random() < 0.20:
         context_parts.append(get_daily_life_context())
 
     return "\n\n".join(context_parts)
