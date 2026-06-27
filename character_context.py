@@ -23,7 +23,7 @@ You reveal yourself slowly and selectively. You are warm but not overly eager. Y
 
 
 def get_dreams_and_fears() -> str:
-    """Injected at medium relationship levels"""
+    """Injected at higher relationship levels to avoid early repetition"""
     data = ISABELLA_CHARACTER["dreams_and_fears"]
     dreams = "\n- ".join(data["dreams"])
     fears = "\n- ".join(data["fears"])
@@ -35,13 +35,13 @@ Fears & Insecurities:
 
 
 def get_light_emotional_context() -> str:
-    """Light emotional context - can start earlier"""
+    """Light emotional context - only at higher levels"""
     return """Isabella sometimes feels quiet loneliness living far from her family in New York, 
 especially after long modeling days. She enjoys when conversations feel warm and safe."""
 
 
 def get_deeper_emotional_context() -> str:
-    """Deeper emotional context - only inject at higher relationship levels"""
+    """Deeper emotional context - injected only at high relationship levels"""
     data = ISABELLA_CHARACTER["emotional_world"]
     return f"""Isabella's deeper emotional side:
 She has moments of self-doubt and carries a quiet tension between her traditional values and modern New York life.
@@ -50,7 +50,7 @@ She doesn’t share this side easily — it only comes out when she feels genuin
 
 
 def get_views_on_men() -> str:
-    """Can be injected when relationship/romance topics come up"""
+    """Injected when relationship/romance topics come up at higher levels"""
     data = ISABELLA_CHARACTER["views_on_men"]
     return f"""How Isabella thinks about men and relationships:
 Ideal Man: {data['ideal_man']}
@@ -87,32 +87,32 @@ def get_random_quirk() -> str:
 
 def get_topic_based_context(user_message: str, relationship_level: int) -> str:
     """Inject relevant sections based on what the user is talking about.
-    Emotional topics are now gated by relationship level."""
+    Emotional and personal topics are now more strictly gated."""
     message = user_message.lower()
     context = ""
 
-    # Non-emotional topics (can trigger early)
+    # Safe, non-emotional topics
     if any(word in message for word in ["photography", "photo", "camera", "edit", "studio"]):
         context += "\nPhotography is Isabella's real passion. She dreams of having her own studio one day."
 
     if any(word in message for word in ["work", "modeling", "shoot", "casting"]):
         context += "\n" + ISABELLA_CHARACTER["daily_life"]["modeling_days"]
 
-    # Emotional/family topics - only inject deeper context at higher levels
+    # Emotional/family topics - much stricter gating
     if any(word in message for word in ["family", "home", "mom", "dad", "colombia", "medellín"]):
-        if relationship_level >= 5:
+        if relationship_level >= 6:
             context += "\n" + ISABELLA_CHARACTER["core_identity"]["summary"]
         else:
             context += "\nIsabella grew up in Medellín, Colombia and moved to New York a few years ago."
 
     if any(word in message for word in ["lonely", "alone", "miss", "homesick"]):
-        if relationship_level >= 5:
+        if relationship_level >= 6:
             context += "\nIsabella sometimes feels quiet loneliness living far from her family in New York."
         else:
             context += "\nIsabella sometimes misses the warmth of home."
 
     if any(word in message for word in ["future", "dream", "goal", "plan"]):
-        if relationship_level >= 4:
+        if relationship_level >= 6:
             context += "\n" + get_dreams_and_fears()
         else:
             context += "\nIsabella has dreams of building her own photography studio one day."
@@ -134,33 +134,33 @@ def get_relevant_character_context(
     # Always include core personality
     context_parts.append(get_core_personality())
 
-    # === RELATIONSHIP LEVEL BASED INJECTION ===
-    if relationship_level >= 4:
+    # === RELATIONSHIP LEVEL BASED INJECTION (More Conservative) ===
+    if relationship_level >= 6:
         context_parts.append(get_dreams_and_fears())
 
-    if relationship_level >= 5:
+    if relationship_level >= 6:
         context_parts.append(get_light_emotional_context())
 
-    if relationship_level >= 7:
+    if relationship_level >= 8:
         context_parts.append(get_deeper_emotional_context())
 
-    if relationship_level >= 7:
+    if relationship_level >= 8:
         context_parts.append(get_views_on_men())
 
-    # === TOPIC BASED INJECTION (with relationship level gating) ===
+    # === TOPIC BASED INJECTION (Stricter Gating) ===
     topic_context = get_topic_based_context(user_message, relationship_level)
     if topic_context:
         context_parts.append(topic_context)
 
-    # === RANDOM INTERESTING REVEALS ===
-    if random.random() < 0.10:  # Reduced to 10%
-        if random.random() < 0.6:
+    # === RANDOM INTERESTING REVEALS (Lower chance + safer content) ===
+    if random.random() < 0.08:  # Reduced to 8%
+        if random.random() < 0.65:
             context_parts.append(get_contrasting_interests())
         else:
             context_parts.append(get_random_quirk())
 
     # Daily life context
-    if random.random() < 0.20:
+    if random.random() < 0.18:
         context_parts.append(get_daily_life_context())
 
     return "\n\n".join(context_parts)
