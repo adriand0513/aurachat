@@ -428,6 +428,62 @@ Summary:"""
     except Exception as e:
         logger.error(f"Summary error: {e}")
 
+def summarize_conversation(convo_id: str, recent_messages: list) -> str:
+    """Generate a concise summary of recent conversation messages."""
+    conversation_text = "\n".join([
+        f"{msg['role']}: {msg['content']}" for msg in recent_messages
+    ])
+    
+    summary_prompt = f"""Summarize the following conversation between a user and Isabella in 4-8 sentences. 
+Focus on key topics discussed, important things the user shared, and the overall emotional tone. 
+Be concise and factual.
+
+Conversation:
+{conversation_text}
+
+Summary:"""
+
+    try:
+        resp = requests.post(
+            XAI_API_BASE,
+            headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": XAI_MODEL,
+                "messages": [{"role": "user", "content": summary_prompt}],
+                "temperature": 0.4,
+                "max_tokens": 400
+            },
+            timeout=30
+        )
+        if resp.status_code == 200:
+            return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.error(f"Summarization error: {e}")
+    
+    return ""
+
+
+def store_conversation_summary(convo_id: str, summary: str, start_id: int = None, end_id: int = None):
+    """Generate embedding and store the summary in the vector database."""
+    if not summary or len(summary) < 30:
+        return
+    
+    embedding = get_embedding(summary)
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        INSERT INTO conversation_summaries 
+        (convo_id, summary, embedding, start_message_id, end_message_id)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (convo_id, summary, embedding, start_id, end_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    logger.info(f"✅ Stored conversation summary for {convo_id}")
+
 
 # ==================== LEGACY COMPATIBILITY ====================
 def get_relationship_level(convo_id: str) -> int:
