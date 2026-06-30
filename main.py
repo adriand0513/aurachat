@@ -10,6 +10,7 @@ import requests
 from dotenv import load_dotenv
 from typing import Dict, List
 from collections import defaultdict
+
 import json
 import stripe
 from pathlib import Path
@@ -22,7 +23,11 @@ import asyncio
 from character_context import get_relevant_character_context
 from apscheduler.schedulers.background import BackgroundScheduler
 from psycopg2.extras import RealDictCursor
-from sentence_transformers import SentenceTransformer
+
+import openai
+from config import OPENAI_API_KEY
+
+openai.api_key = OPENAI_API_KEY
 
 # ==================== PERMANENT GLOBAL FIX ====================
 class DateTimeJSONResponse(JSONResponse):
@@ -54,12 +59,13 @@ from memory import (
     save_message,
     get_relevant_facts,
     get_relationship_level,
-    get_embedding,
     get_pet_name,
     extract_and_save_facts,
     generate_and_save_summary,
-    summarize_conversation,        # ← Add this
-    store_conversation_summary     
+    summarize_conversation,
+    store_conversation_summary,
+    get_embedding,              
+    get_relevant_memories       
 )
 from analytics import log_event, get_live_stats
 from auth import register_user, authenticate_user, create_access_token, get_current_user, get_db_connection, ensure_users_table, update_user_subscription
