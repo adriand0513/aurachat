@@ -89,24 +89,24 @@ def init_relationship_state():
 def init_conversation_summaries():
     conn = get_db_connection()
     cur = conn.cursor()
-
     cur.execute('''
         CREATE TABLE IF NOT EXISTS conversation_summaries (
             id SERIAL PRIMARY KEY,
             convo_id TEXT NOT NULL,
             summary TEXT NOT NULL,
+            embedding VECTOR(1024),
             start_message_id INTEGER,
             end_message_id INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             importance INTEGER DEFAULT 5
         )
     ''')
-
     cur.execute('CREATE INDEX IF NOT EXISTS idx_summary_convo ON conversation_summaries(convo_id)')
+    cur.execute('CREATE INDEX IF NOT EXISTS idx_summary_embedding ON conversation_summaries USING ivfflat (embedding vector_cosine_ops)')
     conn.commit()
     cur.close()
     conn.close()
-    print("✅ Conversation summaries table initialized")
+    print("✅ Conversation summaries table initialized with vector support")
 
 
 # ==================== LAYER 3: RECENT RESPONSE TRACKING ====================
