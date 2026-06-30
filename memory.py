@@ -154,6 +154,10 @@ def save_recent_response(convo_id: str, assistant_message: str):
     cur.close()
     conn.close()
 
+def get_embedding(text: str) -> list:
+    embedding = embedding_model.encode(text, normalize_embeddings=True)
+    return embedding.tolist()
+
 
 def get_recent_responses(convo_id: str) -> list:
     """Get the last 4 assistant messages."""
