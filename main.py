@@ -427,6 +427,19 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
                 if random.randint(1, 4) == 1:
                     extract_and_save_facts(convo_id, user_message, tier)
        
+        # === AUTO SUMMARIZATION TRIGGER ===
+        try:
+            message_count = len(get_history(convo_id, limit=300))
+            if message_count > 15 and message_count % 20 == 0:
+                recent_messages = get_history(convo_id, limit=25)
+                summary = summarize_conversation(convo_id, recent_messages)
+                if summary:
+                    start_id = recent_messages[0].get("id") if recent_messages else None
+                    end_id = recent_messages[-1].get("id") if recent_messages else None
+                    store_conversation_summary(convo_id, summary, start_id, end_id)
+        except Exception as e:
+            logger.error(f"Auto summarization error: {e}")
+       
         # Get context
         state = get_relationship_state(convo_id)
         history = get_history(convo_id)
@@ -566,7 +579,6 @@ async def generate_reply(body: dict = Body(...), user: dict = Depends(get_curren
     except Exception as e:
         logger.error(f"💥 Unexpected error in /api/reply: {e}", exc_info=True)
         return {"replies": []}
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
